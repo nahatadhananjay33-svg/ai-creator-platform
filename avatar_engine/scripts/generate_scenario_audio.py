@@ -20,6 +20,7 @@ from foundation.constants import Language  # noqa: E402
 from foundation.logging import configure_logging, get_logger  # noqa: E402
 from voice_engine.adapters.kokoro import KokoroAdapter  # noqa: E402
 from voice_engine.interfaces import SynthesisRequest  # noqa: E402
+from voice_engine.metrics import validate_kokoro_output  # noqa: E402
 from avatar_engine.datasets import AvatarDatasetManager  # noqa: E402
 
 logger = get_logger("avatar_engine.scripts.scenario_audio")
@@ -32,22 +33,39 @@ def main() -> int:
     adapter = KokoroAdapter(device="cpu")
     manager.assets_dir.mkdir(parents=True, exist_ok=True)
 
-    generated = 0
+    generated, failed = 0, []
     for scenario in dataset.scenarios:
         assets = manager.resolve_assets(scenario)
         target = assets.driving_audio
         language = Language.HINDI if scenario.language == "hi" else Language.ENGLISH
-        result = adapter.synthesize(
-            SynthesisRequest(text=scenario.script_text, language=language, output_path=target)
-        )
-        logger.info(
-            "Scenario audio generated",
-            extra={"context": {"scenario": scenario.scenario_id,
-                               "seconds": round(result.audio_duration_s, 1)}},
-        )
-        print(f"{scenario.scenario_id}: {result.audio_duration_s:.1f}s -> {target.name}")
-        generated += 1
-    print(f"\n{generated} scenario audio files written to {manager.assets_dir}")
+        try:
+            result = adapter.synthesize(
+                SynthesisRequest(text=scenario.script_text, language=language, output_path=target)
+            )
+        except Exception as exc:  # noqa: BLE001 - report the real Kokoro error, never fake audio
+            logger.error("Kokoro synthesis failed",
+                         extra={"context": {"scenario": scenario.scenario_id, "error": str(exc)}})
+            print(f"[FAILED] {scenario.scenario_id}: Kokoro error: {exc}")
+            failed.append(scenario.scenario_id)
+            continue
+
+        # Verify the file Kokoro produced is real speech (not silent/corrupted).
+        v = validate_kokoro_output(target, expected_duration_s=scenario.target_duration_s)
+        status = "OK" if v.valid else "INVALID"
+        print(f"[{status}] {scenario.scenario_id}: {result.audio_duration_s:.1f}s -> "
+              f"{target.name} ({v.audio_class})")
+        if not v.valid:
+            logger.error("Kokoro output failed validation",
+                         extra={"context": {"scenario": scenario.scenario_id,
+                                            "class": v.audio_class, "reason": v.reason}})
+            failed.append(scenario.scenario_id)
+        else:
+            generated += 1
+
+    print(f"\n{generated} valid speech files written to {manager.assets_dir}")
+    if failed:
+        print(f"{len(failed)} FAILED (no placeholder written): {', '.join(failed)}")
+        return 1
     return 0
 
 

@@ -23,6 +23,11 @@ class AvatarBenchmarkConfig:
     assets_dir: str | None = None
     #: Generate synthetic stand-ins for missing assets instead of failing.
     allow_placeholder_assets: bool = True
+    #: Verify driving audio is real speech before avatar generation (A3.8.5).
+    #: When True, real generation models skip any scenario whose audio is a
+    #: placeholder tone / silent / corrupted — the benchmark never drives a
+    #: model with invalid audio. The mock adapter (a wiring double) is exempt.
+    validate_audio: bool = True
     monitor_resources: bool = True
 
     def resolved_output_dir(self) -> Path:

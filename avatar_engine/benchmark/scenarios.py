@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from foundation.benchmarking import BenchmarkCase, CaseResult, Measurement
+from foundation.exceptions import AdapterNotAvailableError
 
 from avatar_engine.datasets.manager import ResolvedAssets
 from avatar_engine.datasets.schema import AvatarScenario
@@ -23,6 +24,7 @@ class GenerationScenarioCase(BenchmarkCase):
         evaluator: GenerationEvaluator,
         output_dir: Path,
         repetition: int = 0,
+        skip_reason: str | None = None,
     ) -> None:
         suffix = f"-r{repetition}" if repetition else ""
         super().__init__(
@@ -35,8 +37,13 @@ class GenerationScenarioCase(BenchmarkCase):
         self.assets = assets
         self.evaluator = evaluator
         self.output_dir = output_dir
+        #: When set (e.g. failed audio validation), the case is SKIPPED with this
+        #: reason before any generation runs — the model never sees bad audio.
+        self.skip_reason = skip_reason
 
     def execute(self, result: CaseResult) -> None:
+        if self.skip_reason:
+            raise AdapterNotAvailableError(self.skip_reason, adapter=self.adapter.engine_id)
         request = GenerationRequest(
             source_image=self.assets.source_image,
             driving_audio=self.assets.driving_audio,
