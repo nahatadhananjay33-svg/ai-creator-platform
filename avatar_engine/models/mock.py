@@ -36,6 +36,8 @@ class MockAvatarAdapter(BaseAvatarAdapter):
     REQUIRED_INPUTS = ("source_image", "driving_audio")
     IMPORT_PACKAGES: tuple[str, ...] = ()
     PIP_PACKAGES: tuple[str, ...] = ()
+    #: Pure-Python test double — runs in the current interpreter, no venv.
+    RUNS_IN_VENV = False
 
     #: Small fixed raster keeps tests fast; enough pixels for frame metrics.
     WIDTH = 64

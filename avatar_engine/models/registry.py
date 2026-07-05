@@ -15,6 +15,7 @@ from foundation.exceptions import AdapterNotAvailableError, ModelNotFoundError
 from foundation.model_manager import Device
 
 from avatar_engine.models.base import BaseAvatarAdapter
+from avatar_engine.models.diagnostics import AdapterDiagnostic
 from avatar_engine.models.interface import GenerationRequest, GenerationResult
 from avatar_engine.models.liveportrait import LivePortraitAdapter
 from avatar_engine.models.mock import MockAvatarAdapter
@@ -25,16 +26,31 @@ from avatar_engine.research.catalog import production_candidates
 class PlannedAvatarAdapter(BaseAvatarAdapter):
     """Placeholder for a researched model whose adapter lands in Phase A4."""
 
-    def is_available(self) -> bool:
-        return False
+    RUNS_IN_VENV = False  # nothing to probe — there is no adapter yet
+
+    _PLANNED_REASON = (
+        "planned model - adapter not implemented yet (Phase A4). "
+        "See avatar_engine/research/ and avatar_engine/models/install_specs.py."
+    )
+
+    def diagnostics(self, force: bool = False) -> AdapterDiagnostic:
+        # Report the true reason (not a misleading 'venv missing'): the model is
+        # researched but has no runnable adapter in this codebase.
+        if self._diag is None or force:
+            self._diag = AdapterDiagnostic(
+                model_id=self.engine_id,
+                available=False,
+                reason=self._PLANNED_REASON,
+                runs_in_venv=False,
+                python_executable=None,
+                venv_dir=None,
+                venv_exists=False,
+                expected_device=self.device.value,
+            )
+        return self._diag
 
     def load(self) -> None:
-        raise AdapterNotAvailableError(
-            f"Adapter '{self.engine_id}' is researched but not yet implemented "
-            f"(planned for Phase A4). See avatar_engine/research/ and "
-            f"avatar_engine/models/install_specs.py.",
-            adapter=self.engine_id,
-        )
+        raise AdapterNotAvailableError(self._PLANNED_REASON, adapter=self.engine_id)
 
     def _generate_impl(self, request: GenerationRequest, output_path: Any) -> GenerationResult:
         raise AssertionError("unreachable: load() always raises")  # pragma: no cover

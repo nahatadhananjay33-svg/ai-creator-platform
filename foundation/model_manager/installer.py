@@ -36,6 +36,19 @@ REPOS_DIR = PROJECT_ROOT / ".venvs" / "_repos"
 TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
 
 
+def model_venv_python(model_id: str, venvs_dir: Path | None = None) -> Path:
+    """Interpreter path for a model's isolated venv.
+
+    Single source of truth for the per-model venv layout, shared by the
+    installer *and* the adapters (which dispatch inference/diagnostics into
+    that interpreter). Mirrors ``InstallationManager.venv_python``.
+    """
+    base = (venvs_dir or VENVS_DIR) / model_id
+    if sys.platform == "win32":
+        return base / "Scripts" / "python.exe"
+    return base / "bin" / "python"
+
+
 @dataclass(frozen=True)
 class InstallSpec:
     """Everything needed to install and verify one model environment."""
@@ -112,8 +125,7 @@ class InstallationManager:
 
     # ------------------------------------------------------------ primitives
     def venv_python(self, model_id: str) -> Path:
-        return self.venvs_dir / model_id / "Scripts" / "python.exe" if sys.platform == "win32" \
-            else self.venvs_dir / model_id / "bin" / "python"
+        return model_venv_python(model_id, self.venvs_dir)
 
     def _run(self, args: Sequence[str], env_vars: dict[str, str] | None = None,
              timeout_s: int | None = None) -> subprocess.CompletedProcess[str]:

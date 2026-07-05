@@ -12,13 +12,13 @@ the detection stack.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 from foundation.exceptions import ModelError
 from foundation.model_manager.installer import REPOS_DIR
 
 from avatar_engine.models.base import BaseAvatarAdapter
+from avatar_engine.models.diagnostics import sanitized_subprocess_env
 from avatar_engine.models.interface import GenerationRequest, GenerationResult
 from avatar_engine.models.media import probe_video
 from avatar_engine.research.catalog import get_profile
@@ -36,12 +36,12 @@ class LivePortraitAdapter(BaseAvatarAdapter):
     def repo_dir(self) -> Path:
         return Path(self.config.get("repo_dir", REPOS_DIR / "liveportrait"))
 
-    def is_available(self) -> bool:
-        return (
-            super().is_available()
-            and (self.repo_dir / "inference.py").exists()
-            and (self.repo_dir / "pretrained_weights" / "liveportrait").exists()
-        )
+    def required_paths(self) -> list[Path]:
+        # Cloned repo entrypoint + downloaded pretrained weights directory.
+        return [
+            self.repo_dir / "inference.py",
+            self.repo_dir / "pretrained_weights" / "liveportrait",
+        ]
 
     def _load_impl(self) -> None:
         if not (self.repo_dir / "inference.py").exists():
@@ -55,7 +55,7 @@ class LivePortraitAdapter(BaseAvatarAdapter):
         work_dir = output_path.parent / f"{output_path.stem}-work"
         work_dir.mkdir(parents=True, exist_ok=True)
         cmd = [
-            sys.executable, "inference.py",
+            str(self.venv_python), "inference.py",
             "-s", str(Path(request.source_image).resolve()),
             "-d", str(Path(request.driving_video).resolve()),
             "--output-dir", str(work_dir.resolve()),
@@ -65,6 +65,7 @@ class LivePortraitAdapter(BaseAvatarAdapter):
         proc = subprocess.run(
             cmd, cwd=self.repo_dir, capture_output=True, text=True,
             encoding="utf-8", errors="replace",
+            env=sanitized_subprocess_env(self.venv_dir),
             timeout=int(self.config.get("timeout_s", self.DEFAULT_TIMEOUT_S)),
         )
         if proc.returncode != 0:

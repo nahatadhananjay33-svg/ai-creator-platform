@@ -41,6 +41,8 @@ class AvatarValidationResult:
     real_time_factor: float | None = None
     peak_rss_mb: float | None = None
     error: str | None = None
+    #: Full structured runtime diagnostic (Phase A3.7) — why deps pass/fail.
+    diagnostics: dict[str, Any] | None = None
 
     @property
     def valid(self) -> bool:
@@ -67,12 +69,13 @@ class AvatarModelValidator:
     ) -> AvatarValidationResult:
         result = AvatarValidationResult(model_id=adapter.engine_id)
 
-        result.dependencies_ok = adapter.is_available()
+        diag = adapter.diagnostics()
+        result.diagnostics = diag.to_dict()
+        result.dependencies_ok = diag.available
         if not result.dependencies_ok:
-            result.error = (
-                "dependencies/repo/checkpoints missing — run "
-                "python -m avatar_engine.scripts.install_models"
-            )
+            # Precise, probed reason (missing package / checkpoint / venv / CUDA)
+            # instead of a generic "dependencies missing".
+            result.error = diag.reason
             return result
 
         monitor = ResourceMonitor(interval_s=1.0).start()

@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 from foundation.exceptions import ModelError
 from foundation.model_manager.installer import REPOS_DIR
 
 from avatar_engine.models.base import BaseAvatarAdapter
+from avatar_engine.models.diagnostics import sanitized_subprocess_env
 from avatar_engine.models.interface import GenerationRequest, GenerationResult
 from avatar_engine.models.media import probe_video
 from avatar_engine.research.catalog import get_profile
@@ -38,12 +38,14 @@ class SadTalkerAdapter(BaseAvatarAdapter):
     def repo_dir(self) -> Path:
         return Path(self.config.get("repo_dir", REPOS_DIR / "sadtalker"))
 
-    def is_available(self) -> bool:
-        return (
-            super().is_available()
-            and (self.repo_dir / "inference.py").exists()
-            and (self.repo_dir / "checkpoints" / "SadTalker_V0.0.2_256.safetensors").exists()
-        )
+    def required_paths(self) -> list[Path]:
+        # Cloned repo entrypoint + the minimal 256-mode checkpoint (prefetched
+        # by the installer). Availability is False with a precise reason if any
+        # of these is missing.
+        return [
+            self.repo_dir / "inference.py",
+            self.repo_dir / "checkpoints" / "SadTalker_V0.0.2_256.safetensors",
+        ]
 
     def _load_impl(self) -> None:
         # Subprocess model: nothing resident; load = verify repo + checkpoints.
@@ -58,7 +60,7 @@ class SadTalkerAdapter(BaseAvatarAdapter):
         work_dir = output_path.parent / f"{output_path.stem}-work"
         work_dir.mkdir(parents=True, exist_ok=True)
         cmd = [
-            sys.executable, "inference.py",
+            str(self.venv_python), "inference.py",
             "--driven_audio", str(Path(request.driving_audio).resolve()),
             "--source_image", str(Path(request.source_image).resolve()),
             "--result_dir", str(work_dir.resolve()),
@@ -69,9 +71,12 @@ class SadTalkerAdapter(BaseAvatarAdapter):
             cmd.append("--still")
         if self.device.value == "cpu":
             cmd.append("--cpu")
+        # Dispatch into SadTalker's own venv with a sanitized environment so the
+        # launcher's PYTHONPATH/VIRTUAL_ENV can't shadow the venv's packages.
         proc = subprocess.run(
             cmd, cwd=self.repo_dir, capture_output=True, text=True,
             encoding="utf-8", errors="replace",
+            env=sanitized_subprocess_env(self.venv_dir),
             timeout=int(self.config.get("timeout_s", self.DEFAULT_TIMEOUT_S)),
         )
         if proc.returncode != 0:
