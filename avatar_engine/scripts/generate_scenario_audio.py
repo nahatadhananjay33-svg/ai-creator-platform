@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from foundation.constants import Language  # noqa: E402
 from foundation.logging import configure_logging, get_logger  # noqa: E402
 from voice_engine.adapters.kokoro import KokoroAdapter  # noqa: E402
+from voice_engine.adapters.kokoro_g2p import EN_G2P_MODEL, ensure_en_core_web_sm  # noqa: E402
 from voice_engine.interfaces import SynthesisRequest  # noqa: E402
 from voice_engine.metrics import validate_kokoro_output  # noqa: E402
 from avatar_engine.datasets import AvatarDatasetManager  # noqa: E402
@@ -30,6 +31,19 @@ def main() -> int:
     configure_logging()
     manager = AvatarDatasetManager()
     dataset = manager.load()
+
+    # Verify (and self-heal) the English G2P model BEFORE generating, so English
+    # scenarios don't fail with spaCy [E050]. English is most scenarios.
+    if any(s.language != "hi" for s in dataset.scenarios):
+        try:
+            already = ensure_en_core_web_sm()
+            print(f"English G2P model {EN_G2P_MODEL}: "
+                  f"{'present' if already else 'downloaded'}")
+        except RuntimeError as exc:
+            logger.error("English G2P model unavailable", extra={"context": {"error": str(exc)}})
+            print(f"[FATAL] {exc}")
+            return 2
+
     adapter = KokoroAdapter(device="cpu")
     manager.assets_dir.mkdir(parents=True, exist_ok=True)
 

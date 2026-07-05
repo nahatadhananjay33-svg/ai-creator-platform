@@ -18,11 +18,28 @@ from foundation.model_manager.installer import TORCH_CPU_INDEX, InstallSpec
 _IS_WINDOWS = sys.platform == "win32"
 _PLATFORM_CORE = ("pyyaml", "psutil", "soundfile", "numpy")
 
+#: Kokoro's English G2P (misaki) needs spaCy's ``en_core_web_sm`` model, which
+#: is NOT a pip dependency of anything — so English synthesis fails with spaCy
+#: [E050] "Can't find model" unless it is fetched explicitly. This downloads it
+#: automatically (version-matched via spaCy's own downloader), idempotently.
+#: uv-created venvs ship no pip, so pip is bootstrapped first when needed.
+_KOKORO_PREFETCH = (
+    "import importlib.util\n"
+    "if importlib.util.find_spec('en_core_web_sm') is None:\n"
+    "    if importlib.util.find_spec('pip') is None:\n"
+    "        import ensurepip; ensurepip.bootstrap()\n"
+    "    from spacy.cli import download; download('en_core_web_sm')\n"
+    "import spacy; spacy.load('en_core_web_sm')\n"  # verify it loads
+    "print('kokoro: en_core_web_sm ready')\n"
+)
+
 INSTALL_SPECS: dict[str, InstallSpec] = {
     "kokoro": InstallSpec(
         model_id="kokoro",
         pip_groups=(("kokoro>=0.9",) + _PLATFORM_CORE,),
         verify_imports=("kokoro", "soundfile"),
+        # Fetch the English spaCy G2P model so EN audio generates (A3.10).
+        prefetch_code=_KOKORO_PREFETCH,
         approx_download_gb=0.6,
     ),
     "f5-tts": InstallSpec(
