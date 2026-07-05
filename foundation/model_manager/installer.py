@@ -57,8 +57,19 @@ class InstallSpec:
     python_version: str = "3.12"
     #: pip requirement groups installed in order (each group = one pip call).
     pip_groups: tuple[tuple[str, ...], ...] = ()
-    #: torch flavor: "cpu" | "cuda" | "none" (installed before pip_groups).
-    torch: str = "cpu"
+    #: torch flavor, installed before pip_groups:
+    #:   "auto" -> CUDA wheels on a GPU host, CPU wheels otherwise (default);
+    #:   "cpu"  -> always CPU; "cuda" -> CUDA when a capable GPU is present,
+    #:   else CPU; "none" -> the spec installs torch itself in a pip_group.
+    torch: str = "auto"
+    #: Explicit torch package pins WITHOUT an index (e.g. ("torch==2.0.1",
+    #: "torchvision==0.15.2")). The installer appends the correct cpu/cuda
+    #: index. Empty -> ("torch", "torchaudio"). Never hardcode an index here.
+    torch_packages: tuple[str, ...] = ()
+    #: CUDA wheel index used when a capable GPU is present and torch is pinned
+    #: to an older version (e.g. "https://download.pytorch.org/whl/cu118").
+    #: None -> the default PyPI index (ships a CUDA build on Linux).
+    torch_cuda_index: str | None = None
     #: import names that must succeed inside the venv to count as installed.
     verify_imports: tuple[str, ...] = ()
     #: optional python snippet run inside the venv to prefetch checkpoints.
@@ -166,6 +177,38 @@ class InstallationManager:
             proc = self._run(cmd, env_vars=env_vars)
         return proc
 
+    @staticmethod
+    def resolve_torch_install(spec: InstallSpec, gpu_target: bool) -> tuple[list[str], str]:
+        """Compute the torch pip arguments and a human label for one spec.
+
+        Pure and testable: never hardcodes CPU. Chooses the CUDA index on a
+        GPU host and the CPU index otherwise, honoring per-spec version pins.
+        """
+        want_cuda = spec.torch in ("auto", "cuda") and gpu_target
+        packages = list(spec.torch_packages) or ["torch", "torchaudio"]
+        args = list(packages)
+        if want_cuda:
+            if spec.torch_cuda_index:
+                args += ["--index-url", spec.torch_cuda_index]
+                label = f"cuda ({spec.torch_cuda_index.rsplit('/', 1)[-1]})"
+            else:
+                label = "cuda (default PyPI)"
+        else:
+            args += ["--index-url", TORCH_CPU_INDEX]
+            label = "cpu"
+        return args, label
+
+    def _install_torch(self, python: Path, spec: InstallSpec, env: EnvironmentReport) -> None:
+        args, label = self.resolve_torch_install(spec, env.gpu_install_target)
+        logger.info(
+            "Installing torch",
+            extra={"context": {"model": spec.model_id, "flavor": label,
+                               "gpu_target": env.gpu_install_target}},
+        )
+        proc = self._pip_install(python, args, spec.env_vars)
+        if proc.returncode != 0:
+            raise RuntimeError(f"torch install failed ({label}): {proc.stderr[-800:]}")
+
     def _verify_imports(self, python: Path, imports: Sequence[str]) -> tuple[list[str], str | None]:
         ok: list[str] = []
         for name in imports:
@@ -206,12 +249,7 @@ class InstallationManager:
                 result.venv_python = str(python)
 
                 if spec.torch != "none":
-                    torch_pkgs = ["torch", "torchaudio"]
-                    args = torch_pkgs + (["--index-url", TORCH_CPU_INDEX]
-                                         if spec.torch == "cpu" or not env.cuda_usable else [])
-                    proc = self._pip_install(python, args, spec.env_vars)
-                    if proc.returncode != 0:
-                        raise RuntimeError(f"torch install failed: {proc.stderr[-800:]}")
+                    self._install_torch(python, spec, env)
 
                 for group in spec.pip_groups:
                     proc = self._pip_install(python, group, spec.env_vars)

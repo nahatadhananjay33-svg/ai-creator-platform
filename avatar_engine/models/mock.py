@@ -77,5 +77,5 @@ class MockAvatarAdapter(BaseAvatarAdapter):
             fps=self.FPS,
             width=self.WIDTH,
             height=self.HEIGHT,
-            metadata={"synthetic": True},
+            metadata={"synthetic": True, "device_actual": self.actual_device},
         )

@@ -30,8 +30,9 @@ boolean.
   - `diagnose(...)` runs a JSON-emitting probe in the target interpreter and
     returns an `AdapterDiagnostic`: python executable, venv dir + existence,
     `sys.path` head, per-package import result (+version or traceback), torch
-    version / `cuda.is_available()` / device name, expected-vs-actual device,
-    required-file existence, warnings, and a one-line `reason`.
+    version / `cuda.is_available()` / CUDA build / GPU name / **GPU memory**
+    (A3.8), **expected vs actual inference device**, required-file existence,
+    warnings, and a one-line `reason`.
   - `sanitized_subprocess_env(...)` strips `PYTHONPATH` / `PYTHONHOME` /
     `VIRTUAL_ENV` leakage from the launcher so the venv's own packages win.
   - `write_adapter_validation_report(...)` emits the report (below).

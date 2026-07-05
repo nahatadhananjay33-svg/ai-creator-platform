@@ -58,6 +58,11 @@ class GenerationEvaluator:
         if rtf is not None:
             measurements.append(Measurement("real_time_factor", round(rtf, 3), "x"))
 
+        # Device actually used for inference (A3.8) — so reports show CPU vs GPU.
+        device = result.metadata.get("device_actual")
+        if device:
+            measurements.append(Measurement("device", device, source="static"))
+
         # Frame statistics (dependency-free for raw AVI, cv2 for codecs)
         try:
             stats = compute_video_stats(result.video_path)

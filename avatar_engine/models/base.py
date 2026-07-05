@@ -115,6 +115,12 @@ class BaseAvatarAdapter(AvatarGenerator):
     def is_available(self) -> bool:
         return self.diagnostics().available
 
+    @property
+    def actual_device(self) -> str:
+        """Device inference will actually run on in this adapter's venv
+        ('cuda' only when requested *and* usable there, else 'cpu')."""
+        return self.diagnostics().actual_device
+
     def load(self) -> None:
         if self._loaded:
             return

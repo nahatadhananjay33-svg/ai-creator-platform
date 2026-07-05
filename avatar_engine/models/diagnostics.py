@@ -67,9 +67,11 @@ class AdapterDiagnostic:
     torch_installed: bool = False
     torch_version: str | None = None
     torch_cuda_available: bool = False
-    torch_cuda_build: str | None = None
+    torch_cuda_build: str | None = None  # CUDA runtime version torch was built against
     cuda_device_name: str | None = None
+    cuda_total_mem_mb: float | None = None
     expected_device: str = "auto"
+    actual_device: str = "cpu"  # device inference will actually use in this venv
     cuda_expected: bool = False
     device_matches_expectation: bool = True
     required_paths: list[dict[str, Any]] = field(default_factory=list)  # {path, exists}
@@ -121,10 +123,12 @@ _PROBE_CODE = (
     "    import torch\n"
     "    t = {'installed': True, 'version': torch.__version__, "
     "'cuda_available': bool(torch.cuda.is_available()), "
-    "'cuda_build': getattr(torch.version, 'cuda', None), 'device_name': None}\n"
+    "'cuda_build': getattr(torch.version, 'cuda', None), 'device_name': None, "
+    "'total_mem_mb': None}\n"
     "    try:\n"
     "        if torch.cuda.is_available():\n"
     "            t['device_name'] = torch.cuda.get_device_name(0)\n"
+    "            t['total_mem_mb'] = torch.cuda.get_device_properties(0).total_memory / (1024*1024)\n"
     "    except BaseException:\n"
     "        pass\n"
     "    out['torch'] = t\n"
@@ -241,7 +245,10 @@ def diagnose(
     diag.torch_cuda_available = bool(torch_info.get("cuda_available"))
     diag.torch_cuda_build = torch_info.get("cuda_build")
     diag.cuda_device_name = torch_info.get("device_name")
+    diag.cuda_total_mem_mb = torch_info.get("total_mem_mb")
 
+    # Actual device inference will use: CUDA only if requested *and* usable here.
+    diag.actual_device = "cuda" if (cuda_expected and diag.torch_cuda_available) else "cpu"
     diag.device_matches_expectation = (not cuda_expected) or diag.torch_cuda_available
     if cuda_expected and not diag.torch_cuda_available:
         diag.warnings.append(
@@ -342,8 +349,10 @@ def write_adapter_validation_report(
             f"- venv dir: `{d.venv_dir}`",
             f"- torch: {d.torch_version or 'not installed'}  ·  "
             f"cuda_available: {d.torch_cuda_available}  ·  "
-            f"cuda_build: {d.torch_cuda_build or 'n/a'}  ·  device: {d.cuda_device_name or 'cpu'}",
-            f"- expected device: {d.expected_device}  ·  matches: {d.device_matches_expectation}",
+            f"cuda_build: {d.torch_cuda_build or 'n/a'}  ·  GPU: {d.cuda_device_name or 'none'}"
+            + (f" ({d.cuda_total_mem_mb/1024:.1f} GB)" if d.cuda_total_mem_mb else ""),
+            f"- expected device: {d.expected_device}  ·  actual: {d.actual_device}  ·  "
+            f"matches: {d.device_matches_expectation}",
         ]
         if d.packages:
             lines.append("- Packages:")

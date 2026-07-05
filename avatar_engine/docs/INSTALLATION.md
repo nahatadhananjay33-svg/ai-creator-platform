@@ -1,5 +1,16 @@
 # Avatar Model Installation
 
+> **GPU enablement (Phase A3.8).** The installer now auto-selects the PyTorch
+> flavor per host: **CUDA wheels when a capable GPU is present** (a detected
+> GPU + a driver ≥ the CUDA 11.8 floor), **CPU wheels otherwise** — decided by
+> `EnvironmentReport.gpu_install_target`, which does not need torch in the
+> launcher (so it works in the Colab main kernel). No spec hardcodes a CPU
+> index anymore; version-pinned models (SadTalker: torch 2.0.1) carry a
+> `torch_cuda_index` (cu118) the installer appends on a GPU host. New avatar
+> specs inherit this automatically (default `torch="auto"`). Verify with
+> `python -m avatar_engine.scripts.validate_adapters` — it reports
+> `torch.cuda.is_available()`, the GPU name, and VRAM inside each venv.
+
 > **Phase A3.5 verified status (this Windows/CPU host).** Install with
 > `python -m avatar_engine.scripts.install_models --models <ids>` — repo
 > clones and checkpoint prefetch are now automated (`git_repo` +

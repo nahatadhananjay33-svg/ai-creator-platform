@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sys
 
-from foundation.model_manager.installer import REPOS_DIR, InstallSpec, TORCH_CPU_INDEX
+from foundation.model_manager.installer import REPOS_DIR, InstallSpec
 
 _IS_WINDOWS = sys.platform == "win32"
 _PLATFORM_CORE = ("pyyaml", "psutil", "numpy", "opencv-python", "imageio-ffmpeg")
@@ -39,10 +39,13 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         # py3.10 + torch 2.0.1/torchvision 0.15.2 (A3.5): the newest combo where
         # basicsr's `torchvision.transforms.functional_tensor` import still exists.
         python_version="3.10",
-        torch="none",
+        # GPU-aware (A3.8): the installer appends the cu118 index on a GPU host
+        # and the CPU index otherwise — no hardcoded flavor. torch 2.0.1 ships
+        # cu118 wheels, which run on the Colab T4.
+        torch="auto",
+        torch_packages=("torch==2.0.1", "torchvision==0.15.2", "torchaudio==2.0.2"),
+        torch_cuda_index="https://download.pytorch.org/whl/cu118",
         pip_groups=(
-            ("torch==2.0.1", "torchvision==0.15.2", "torchaudio==2.0.2",
-             "--index-url", TORCH_CPU_INDEX),
             ("face-alignment==1.3.5", "imageio", "librosa==0.10.1", "numba", "resampy",
              "pydub", "scipy", "kornia", "yacs", "basicsr==1.4.2", "facexlib", "gfpgan",
              "safetensors", "av", "joblib", "scikit-image", "huggingface_hub",
@@ -72,7 +75,10 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         verify_imports=("insightface", "cv2"),
         git_repo="https://github.com/KwaiVGI/LivePortrait.git",
         approx_download_gb=2.0,
-        torch="cpu",  # this host has no usable CUDA; upstream supports --flag_force_cpu
+        # GPU-aware (A3.8): CUDA wheels on a GPU host, CPU otherwise. torchvision
+        # is required by LivePortrait's transforms.
+        torch="auto",
+        torch_packages=("torch", "torchvision", "torchaudio"),
         platform_notes="insightface pip is an sdist needing MSVC on Windows — install may "
         "fail without build tools. COMMERCIAL BLOCKER: InsightFace models are "
         "research-only; replace detection before production use.",

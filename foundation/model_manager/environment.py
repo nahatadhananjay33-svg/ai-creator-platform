@@ -69,6 +69,18 @@ class EnvironmentReport:
     def cuda_usable(self) -> bool:
         return self.torch.cuda_available and self.nvidia_driver.supports_modern_cuda
 
+    @property
+    def gpu_install_target(self) -> bool:
+        """True when CUDA PyTorch wheels should be installed on this host.
+
+        Unlike :attr:`cuda_usable` (which needs torch already present in the
+        *launcher* to answer), this depends only on a detected GPU plus a driver
+        new enough for modern CUDA. So the installer decides correctly even
+        before any torch exists in the launching interpreter — e.g. the Colab
+        main kernel, which runs ``install_models`` with no torch installed.
+        """
+        return self.hardware.has_gpu and self.nvidia_driver.supports_modern_cuda
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

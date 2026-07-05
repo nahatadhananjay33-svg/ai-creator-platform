@@ -22,6 +22,8 @@ _KEY_METRICS = (
     ("frozen_frame_ratio", "Frozen"),
     ("peak_rss_mb", "Peak RAM (MB)"),
     ("peak_gpu_mem_mb", "Peak VRAM (MB)"),
+    ("avg_gpu_mem_mb", "Avg VRAM (MB)"),
+    ("gpu_utilization_percent", "GPU %"),
 )
 
 
@@ -62,14 +64,23 @@ class AvatarMarkdownReporter(Reporter):
             )
             lines.append("")
 
+        # Device actually used per model (string; not a numeric mean).
+        device_by_subject: dict[str, str] = {}
+        for case in run.cases:
+            dev = case.get_value("device")
+            if dev and case.subject_id not in device_by_subject:
+                device_by_subject[case.subject_id] = str(dev)
+
         lines.append("## Results by model (automatic metrics)")
         lines.append("")
-        header = "| Model | Cases | Pass | Fail | Skip | " + " | ".join(h for _, h in _KEY_METRICS) + " |"
+        header = ("| Model | Device | Cases | Pass | Fail | Skip | "
+                  + " | ".join(h for _, h in _KEY_METRICS) + " |")
         lines.append(header)
-        lines.append("|" + "---|" * (5 + len(_KEY_METRICS)))
+        lines.append("|" + "---|" * (6 + len(_KEY_METRICS)))
         for s in summary.subjects:
             cells = [
-                s.subject_id, str(s.total_cases), str(s.passed), str(s.failed), str(s.skipped),
+                s.subject_id, device_by_subject.get(s.subject_id, "—"),
+                str(s.total_cases), str(s.passed), str(s.failed), str(s.skipped),
                 *[_fmt(s.metric_means.get(name)) for name, _ in _KEY_METRICS],
             ]
             lines.append("| " + " | ".join(cells) + " |")

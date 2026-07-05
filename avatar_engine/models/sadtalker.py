@@ -101,5 +101,10 @@ class SadTalkerAdapter(BaseAvatarAdapter):
             video_path=output_path, engine_id=self.engine_id, generation_time_s=0.0,
             duration_s=probe.duration_s, fps=probe.fps, width=probe.width,
             height=probe.height,
-            metadata={"mode": "cpu-256-crop", "frames": probe.frame_count},
+            metadata={
+                "mode": "256-crop",
+                "frames": probe.frame_count,
+                "device_requested": self.device.value,
+                "device_actual": self.actual_device,
+            },
         )

@@ -108,8 +108,15 @@ class BenchmarkRunner:
         result.duration_s = stopwatch.elapsed_s
         if monitor is not None and monitor.peak is not None:
             result.add(Measurement("peak_rss_mb", round(monitor.peak.rss_mb, 1), "MB"))
-            if monitor.peak.gpu_mem_mb is not None:
-                result.add(Measurement("peak_gpu_mem_mb", round(monitor.peak.gpu_mem_mb, 1), "MB"))
+            # GPU metrics (device-wide via nvidia-smi) — present only on GPU hosts.
+            if monitor.peak_gpu_mem_mb is not None:
+                result.add(Measurement("peak_gpu_mem_mb", round(monitor.peak_gpu_mem_mb, 1), "MB"))
+                result.add(Measurement("avg_gpu_mem_mb", round(monitor.avg_gpu_mem_mb, 1), "MB"))
+            if monitor.avg_gpu_util_percent is not None:
+                result.add(Measurement("gpu_utilization_percent",
+                                       round(monitor.avg_gpu_util_percent, 1), "%"))
+            if monitor.max_gpu_temp_c is not None:
+                result.add(Measurement("gpu_temp_c", round(monitor.max_gpu_temp_c, 1), "C"))
         if self.on_case_finished is not None:
             self.on_case_finished(result)
         return result

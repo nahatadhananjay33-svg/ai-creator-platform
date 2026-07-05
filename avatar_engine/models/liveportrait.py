@@ -96,6 +96,9 @@ class LivePortraitAdapter(BaseAvatarAdapter):
             video_path=output_path, engine_id=self.engine_id, generation_time_s=0.0,
             duration_s=probe.duration_s, fps=probe.fps, width=probe.width,
             height=probe.height,
-            metadata={"mode": "cpu" if self.device.value == "cpu" else "gpu",
-                      "frames": probe.frame_count},
+            metadata={
+                "frames": probe.frame_count,
+                "device_requested": self.device.value,
+                "device_actual": self.actual_device,
+            },
         )
