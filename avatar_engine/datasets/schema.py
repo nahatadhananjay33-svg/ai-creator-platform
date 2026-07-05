@@ -51,6 +51,10 @@ class AvatarScenario:
     #: Asset file names relative to the assets directory ("" = use default).
     source_image: str = ""
     driving_audio: str = ""
+    #: Optional driving VIDEO for video-driven models (LivePortrait). Empty ->
+    #: a shared "driving_video.mp4" in the assets dir if present. Audio-driven
+    #: models (SadTalker) ignore this.
+    driving_video: str = ""
     evaluation_focus: tuple[EvaluationFocus, ...] = ()
     notes: str = ""
 

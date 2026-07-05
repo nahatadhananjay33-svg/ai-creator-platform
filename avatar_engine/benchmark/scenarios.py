@@ -47,6 +47,7 @@ class GenerationScenarioCase(BenchmarkCase):
         request = GenerationRequest(
             source_image=self.assets.source_image,
             driving_audio=self.assets.driving_audio,
+            driving_video=self.assets.driving_video,  # used by video-driven models
             output_path=self.output_dir / f"{self.case_id}.mp4",
             scenario_id=self.avatar_scenario.scenario_id,
         )

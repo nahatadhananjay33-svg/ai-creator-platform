@@ -106,11 +106,15 @@ class AvatarBenchmark:
         adapters = [(aid, create_adapter(aid, device=self.config.device))
                     for aid in self.config.adapters]
 
-        # Gate: never drive a REAL generation model with invalid audio. If every
-        # scenario's audio is invalid, stop before generation (goal: no silent
-        # continuation on placeholder tones).
-        real_adapters = [a for _, a in adapters if getattr(a, "RUNS_IN_VENV", False)]
-        if self.config.validate_audio and real_adapters and self._audio_validations:
+        def _reqs(a):
+            return getattr(a, "REQUIRED_INPUTS", ())
+
+        # Gate: never drive a REAL *audio-driven* model with invalid audio. If
+        # every scenario's audio is invalid, stop before generation. (Video-driven
+        # models like LivePortrait don't use audio and are exempt from this.)
+        audio_real = [a for _, a in adapters
+                      if getattr(a, "RUNS_IN_VENV", False) and "driving_audio" in _reqs(a)]
+        if self.config.validate_audio and audio_real and self._audio_validations:
             if not any(v.valid for v in self._audio_validations.values()):
                 reasons = {sid: v.reason for sid, v in self._audio_validations.items()}
                 raise BenchmarkError(
@@ -121,11 +125,21 @@ class AvatarBenchmark:
                 )
 
         for adapter_id, adapter in adapters:
-            gate = self.config.validate_audio and getattr(adapter, "RUNS_IN_VENV", False)
+            reqs = _reqs(adapter)
+            is_real = getattr(adapter, "RUNS_IN_VENV", False)
+            audio_gate = self.config.validate_audio and is_real and "driving_audio" in reqs
+            needs_video = "driving_video" in reqs
             for scenario in scenarios:
                 assets = self.dataset_manager.resolve_assets(scenario)
                 skip_reason = None
-                if gate:
+                if needs_video and assets.driving_video is None:
+                    # Video-driven model (LivePortrait) with no driving clip.
+                    skip_reason = (
+                        "no driving video: this model is video-driven; place a "
+                        "driving_video.mp4 in the assets dir (e.g. seeded from "
+                        "LivePortrait's example driving clips)."
+                    )
+                elif audio_gate:
                     v = self._audio_validations.get(scenario.scenario_id)
                     if v is not None and not v.valid:
                         skip_reason = f"audio validation failed: {v.reason}"

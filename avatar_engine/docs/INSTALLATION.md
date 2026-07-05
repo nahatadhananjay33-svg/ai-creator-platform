@@ -1,5 +1,17 @@
 # Avatar Model Installation
 
+> **LivePortrait weights (Phase A3.9).** The installer now auto-downloads
+> LivePortrait's 8 humans-mode pretrained weights (~660 MB) from HF
+> `KlingTeam/LivePortrait` into `pretrained_weights/` via the spec's
+> `prefetch_code` (resumable, cached, skips already-valid files). The manifest
+> (filenames, purpose, size) lives in `avatar_engine/models/liveportrait_weights.py`.
+> Verify per-weight status with
+> `python -m avatar_engine.scripts.validate_liveportrait_weights`
+> (validated / missing / corrupted / checksum_mismatch). LivePortrait is
+> **video-driven**: it needs a `driving_video.mp4` in the assets dir (the Colab
+> notebook seeds one from LivePortrait's example clips); without it the
+> benchmark records those scenarios SKIPPED with a clear reason.
+
 > **GPU enablement (Phase A3.8).** The installer now auto-selects the PyTorch
 > flavor per host: **CUDA wheels when a capable GPU is present** (a detected
 > GPU + a driver ≥ the CUDA 11.8 floor), **CPU wheels otherwise** — decided by

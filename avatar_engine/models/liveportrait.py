@@ -20,6 +20,7 @@ from foundation.model_manager.installer import REPOS_DIR
 from avatar_engine.models.base import BaseAvatarAdapter
 from avatar_engine.models.diagnostics import sanitized_subprocess_env
 from avatar_engine.models.interface import GenerationRequest, GenerationResult
+from avatar_engine.models.liveportrait_weights import check_weights, required_weight_paths
 from avatar_engine.models.media import probe_video
 from avatar_engine.research.catalog import get_profile
 
@@ -37,11 +38,14 @@ class LivePortraitAdapter(BaseAvatarAdapter):
         return Path(self.config.get("repo_dir", REPOS_DIR / "liveportrait"))
 
     def required_paths(self) -> list[Path]:
-        # Cloned repo entrypoint + downloaded pretrained weights directory.
-        return [
-            self.repo_dir / "inference.py",
-            self.repo_dir / "pretrained_weights" / "liveportrait",
-        ]
+        # Repo entrypoint + EVERY required pretrained weight (from the upstream
+        # manifest) — so availability fails precisely when a weight is missing,
+        # not just when the top-level directory is absent.
+        return [self.repo_dir / "inference.py", *required_weight_paths(self.repo_dir)]
+
+    def weight_report(self) -> list[dict]:
+        """Per-weight status (validated/missing/corrupted/checksum_mismatch)."""
+        return [s.to_dict() for s in check_weights(self.repo_dir)]
 
     def _load_impl(self) -> None:
         if not (self.repo_dir / "inference.py").exists():

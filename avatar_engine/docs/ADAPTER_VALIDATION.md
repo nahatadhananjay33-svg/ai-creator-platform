@@ -1,5 +1,10 @@
 # Adapter Validation & Runtime Diagnostics (Phase A3.7)
 
+> **A3.9:** LivePortrait's `required_paths()` now returns `inference.py` + every
+> pretrained weight (from the upstream manifest), so a missing weight is named
+> specifically instead of a bare `missing files: liveportrait`. See
+> [`LIVEPORTRAIT.md`](LIVEPORTRAIT.md).
+
 ## The problem this solves
 
 Avatar adapters that run a cloned model repo (SadTalker, LivePortrait, …) do

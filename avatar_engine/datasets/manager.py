@@ -38,6 +38,8 @@ class ResolvedAssets:
 
     source_image: Path
     driving_audio: Path
+    #: Driving video for video-driven models (LivePortrait); None when absent.
+    driving_video: Path | None = None
 
 
 class AvatarDatasetManager:
@@ -69,6 +71,7 @@ class AvatarDatasetManager:
                         target_duration_s=float(entry["target_duration_s"]),
                         source_image=entry.get("source_image", ""),
                         driving_audio=entry.get("driving_audio", ""),
+                        driving_video=entry.get("driving_video", ""),
                         evaluation_focus=tuple(
                             EvaluationFocus(f) for f in entry.get("evaluation_focus", [])
                         ),
@@ -115,9 +118,13 @@ class AvatarDatasetManager:
         """Absolute asset paths for a scenario (defaults when unset)."""
         image = scenario.source_image or "default_portrait.png"
         audio = scenario.driving_audio or f"{scenario.scenario_id}.wav"
+        # Driving video is optional: a per-scenario override, else a shared
+        # "driving_video.mp4". Only present when video-driven models need it.
+        video = self.assets_dir / (scenario.driving_video or "driving_video.mp4")
         return ResolvedAssets(
             source_image=self.assets_dir / image,
             driving_audio=self.assets_dir / audio,
+            driving_video=video if video.exists() else None,
         )
 
     def missing_assets(self, dataset: ScenarioDataset) -> dict[str, list[str]]:

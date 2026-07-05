@@ -1,5 +1,11 @@
 # Avatar Benchmarking Guide
 
+> **A3.9:** video-driven models (LivePortrait) are supported via the
+> `driving_video` asset — the benchmark passes a `driving_video.mp4` (per
+> scenario or shared) and skips those scenarios with a clear reason if none is
+> present. `python -m avatar_engine.scripts.compare_models` writes a measured
+> SadTalker-vs-LivePortrait comparison. See [`LIVEPORTRAIT.md`](LIVEPORTRAIT.md).
+
 How to run, extend, and interpret the avatar benchmark. The framework is
 the same composition pattern as the voice benchmark: generic
 `foundation.benchmarking` primitives + avatar scenarios + avatar metrics.

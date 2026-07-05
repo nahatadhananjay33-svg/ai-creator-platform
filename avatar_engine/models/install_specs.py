@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 
 from foundation.model_manager.installer import REPOS_DIR, InstallSpec
+from avatar_engine.models.liveportrait_weights import build_prefetch_code
 
 _IS_WINDOWS = sys.platform == "win32"
 _PLATFORM_CORE = ("pyyaml", "psutil", "numpy", "opencv-python", "imageio-ffmpeg")
@@ -74,7 +75,11 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         ),
         verify_imports=("insightface", "cv2"),
         git_repo="https://github.com/KwaiVGI/LivePortrait.git",
-        approx_download_gb=2.0,
+        # Downloads the humans-mode pretrained weights (~660 MB) from
+        # HF KlingTeam/LivePortrait into pretrained_weights/ (A3.9). Resumable,
+        # cached, skips already-valid files (see liveportrait_weights.py).
+        prefetch_code=build_prefetch_code(REPOS_DIR / "liveportrait"),
+        approx_download_gb=2.7,
         # GPU-aware (A3.8): CUDA wheels on a GPU host, CPU otherwise. torchvision
         # is required by LivePortrait's transforms.
         torch="auto",
