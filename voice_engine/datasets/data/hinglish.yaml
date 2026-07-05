@@ -1,0 +1,150 @@
+language: hi-en
+version: "1.0"
+description: >
+  Hinglish (romanized Hindi-English code-switching) benchmark prompts — the
+  register actually spoken in Indian sales calls and Instagram Reels. Written
+  primarily in Latin script the way agents type; a few items mix scripts.
+  This is the hardest and most business-critical language condition.
+
+items:
+  - id: hien-prop-001
+    category: property_discussion
+    text: >
+      Sir, yeh 3 BHK flat seventh floor par hai, carpet area 1450 square
+      feet ka hai, aur do covered parking milti hai. Tower east-facing hai,
+      toh morning sunlight living room mein directly aati hai.
+    expected_scripts: [Latin]
+
+  - id: hien-prop-002
+    category: property_discussion
+    text: >
+      Society mein clubhouse, swimming pool, gym sab kuch hai, aur almost
+      saath percent open green area hai. Maintenance sirf saade teen rupaye
+      per square foot per month hai.
+    expected_scripts: [Latin]
+
+  - id: hien-builder-001
+    category: builder_name
+    text: >
+      Project Avinash Group ka hai sir, Raipur ke sabse trusted builders
+      mein se ek. Pehle phases mein Shree Balaji Constructions aur Dhillon
+      Buildcon bhi partner the.
+    expected_scripts: [Latin]
+
+  - id: hien-project-001
+    category: project_name
+    text: >
+      Avinash Capital Homes Two purane Dhamtari Road par hai, aur Wallfort
+      Elegante aur Singapour City airport corridor ke paas Nava Raipur
+      mein aa rahe hain.
+    expected_scripts: [Latin]
+
+  - id: hien-rera-001
+    category: rera_number
+    text: >
+      Project Chhattisgarh RERA mein registered hai sir. Registration number
+      note kar lijiye — P C G R E R A two five zero five one eight, zero
+      zero zero five four two. Aap portal par verify kar sakte hain.
+    expected_scripts: [Latin]
+    notes: Alphanumeric sequence inside code-switched sentence — hardest entity case.
+
+  - id: hien-site-001
+    category: site_visit
+    text: >
+      Main aapke liye Saturday morning saade gyarah baje site visit arrange
+      kar deti hoon. Hamare executive Ring Road Number One wale project gate
+      par milenge, poora visit bas forty-five minutes ka hai.
+    expected_scripts: [Latin]
+
+  - id: hien-appt-001
+    category: appointment
+    text: >
+      Aapki appointment Tuesday, fourteen July ko sham chaar baje Telibandha
+      office mein confirm ho gayi hai. Booking ke liye Aadhaar card aur PAN
+      card ki copy saath le aaiyega please.
+    expected_scripts: [Latin]
+
+  - id: hien-addr-001
+    category: address
+    text: >
+      Sample flat ka address hai Plot Number 12-B, Sector 27, Nava Raipur
+      Atal Nagar, Central Park entrance ke saamne, PIN code four nine two
+      zero zero two.
+    expected_scripts: [Latin]
+
+  - id: hien-phone-001
+    category: phone_number
+    text: >
+      Aap hamari sales team ko nine eight two six zero one four three five
+      seven par call kar sakte hain, ya phir landline zero seven seven one,
+      two four four, one zero one zero par, subah das se sham saat baje tak.
+    expected_scripts: [Latin]
+
+  - id: hien-price-001
+    category: pricing
+    text: >
+      Two BHK ki pricing bayalis lakh nabbe hazaar se start hoti hai sir,
+      aur three BHK premium units ek crore paanch lakh tak jaati hain — GST,
+      registry aur ek covered car parking sab included hai.
+    expected_scripts: [Latin]
+    notes: Hindi number words + English units in one sentence.
+
+  - id: hien-loan-001
+    category: loan
+    text: >
+      Twenty percent down payment ke saath, pachaas lakh ke home loan par
+      eight point five percent interest rate se twenty years ki EMI lagbhag
+      forty-three thousand four hundred rupaye aayegi. SBI, HDFC aur LIC
+      Housing ke saath hamara direct tie-up hai.
+    expected_scripts: [Latin]
+
+  - id: hien-narr-001
+    category: long_narration
+    text: >
+      Toh doston, aaj ke is video mein hum explore karenge Capital Greens,
+      jo Raipur ki sabse nayi integrated township hai. Vidhan Sabha Road par
+      thirty-two acres mein phaili is township mein residential towers, high
+      street retail zone, aur senior living block sab kuch hai. Grand
+      boulevard se enter karte hi aapko seventy feet wide internal roads
+      dikhengi, dono taraf flowering trees ke saath. Pehle teen towers —
+      Amber, Coral aur Jade — mein two aur three BHK homes hain, 1050 se
+      1850 square feet tak. Har apartment Vastu compliant hai, koi shared
+      wall nahi, cross ventilation full hai, aur floor-to-ceiling windows
+      hain. Township mein two-acre central park, amphitheater, skating rink
+      aur five-a-side football turf bhi hai. Phase one ka possession
+      December 2027 mein scheduled hai, aur project ko saari statutory
+      approvals mil chuki hain. Toh agar aap Raipur mein ghar dhoondh rahe
+      hain, yeh video end tak zaroor dekhiye.
+    expected_scripts: [Latin]
+    notes: ~1000 chars; Instagram/YouTube narration register — the platform's core voice.
+
+  - id: hien-conv-001
+    category: conversation
+    text: >
+      Good afternoon sir! Sharma ji bol rahe hain na? Perfect. Main Skyline
+      Realty se baat kar rahi hoon, aapne kal villa plot ke liye enquiry ki
+      thi. Do minute hain aapke paas? Great. Jo plot aapne shortlist kiya
+      hai wo corner wala hai, thirty by fifty, park facing. Aap weekend par
+      site visit prefer karenge, ya pehle main layout aur pricing WhatsApp
+      par bhej doon?
+    expected_scripts: [Latin]
+    notes: Exact register of Indian tele-sales; the target for phone voice AI.
+
+  - id: hien-conv-002
+    category: conversation
+    text: >
+      Sir possession delay wali baat main samajh rahi hoon, genuine concern
+      hai. Clarify kar doon — pehla phase new airport road alignment ki wajah
+      se late hua tha, but is phase ka completion certificate already apply
+      ho chuka hai. Aap bolein toh main abhi RERA ki quarterly progress
+      report email kar deti hoon. Theek rahega?
+    expected_scripts: [Latin]
+
+  - id: hien-code-001
+    category: code_switching
+    text: >
+      Booking amount sirf ₹51,000 hai sir. बाकी सब documentation हम handle
+      कर लेंगे — aapko bas application form sign karna hai aur PAN card ki
+      copy share karni hai.
+    expected_scripts: [Latin, Devanagari]
+    notes: Mixed-script sentence with currency symbol — worst-case input.

@@ -1,0 +1,29 @@
+# Built-in pronunciation lexicon.
+#
+# Seeded with terms the Phase A1 named-entity prompts showed engines
+# mispronounce (real-estate domain: regulators, unit types, area units).
+# Add project/builder names in environment-specific lexicon files listed
+# under `pronunciation.lexicons` in the Voice Engine config.
+#
+# Entry fields:
+#   grapheme:    written form (whole-word matched, case-insensitive default)
+#   replacement: what the TTS engine should receive instead
+#   language:    optional language code (en/hi/hi-en/bn); omit for all
+#   regex:       true -> grapheme is a raw regular expression
+entries:
+  - grapheme: RERA
+    replacement: "reh-rah"
+  - grapheme: EMI
+    replacement: "E M I"
+  - grapheme: NRI
+    replacement: "N R I"
+  - grapheme: BHK
+    replacement: "B H K"
+  - grapheme: "sq.ft."
+    replacement: "square feet"
+    regex: false
+  - grapheme: "sqft"
+    replacement: "square feet"
+  - grapheme: "\\b(\\d+)\\s*BHK\\b"
+    replacement: "\\1 B H K"
+    regex: true

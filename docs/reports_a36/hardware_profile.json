@@ -1,0 +1,38 @@
+{
+  "hardware": {
+    "os_name": "Windows",
+    "os_version": "10.0.26200",
+    "machine": "AMD64",
+    "python_version": "3.11.9",
+    "cpu_name": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+    "cpu_cores_logical": 8,
+    "ram_total_mb": 8029,
+    "gpus": [
+      {
+        "name": "GeForce GTX 1050",
+        "vram_total_mb": 3072
+      }
+    ]
+  },
+  "python_version": "3.11.9",
+  "python_executable": "C:\\Users\\ACER\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+  "os_details": "Windows 10 (10.0.26200)",
+  "disk_free_gb": 198.7,
+  "torch": {
+    "installed": false,
+    "version": null,
+    "cuda_available": false,
+    "cuda_version": null
+  },
+  "nvidia_driver": {
+    "present": true,
+    "driver_version": "451.67",
+    "supports_modern_cuda": false,
+    "notes": "driver 451.67 predates CUDA 11.8 floor (452.39); modern PyTorch CUDA wheels cannot use this GPU without a driver update"
+  },
+  "cuda_usable": false,
+  "multi_gpu": false,
+  "gpu_count": 1,
+  "phase": "A3.6",
+  "generated_note": "Measured on the A3.6 GPU host. No timestamp injected here to avoid nondeterminism; see report md."
+}

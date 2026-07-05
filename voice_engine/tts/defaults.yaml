@@ -1,0 +1,51 @@
+# Voice Engine production defaults.
+#
+# Model selection is configuration, not code: change default_model or the
+# routing chains here (or via AICP__engine__default_model env overrides)
+# to switch engines platform-wide. Chains list adapter ids in preference
+# order; the first one whose dependencies are installed wins.
+#
+# Engine choices reflect the measured Phase A1.5 results
+# (docs/PHASE_A15_REPORT.md): Kokoro is the deployable real-time tier,
+# Chatterbox the commercial quality/cloning tier.
+
+engine:
+  default_model: kokoro
+  device: auto
+  # Per-model adapter config passed to create_adapter(config=...).
+  models:
+    kokoro: {}
+    melotts: {}
+    styletts2: {}
+    chatterbox: {}
+    f5-tts: {}      # non-commercial license: internal/eval use only
+    xtts-v2: {}     # CPML license: benchmark baseline only
+
+routing:
+  realtime: [kokoro, melotts, mock]
+  quality: [chatterbox, styletts2, kokoro, mock]
+  cloning: [chatterbox, styletts2, f5-tts, mock]
+
+cache:
+  enabled: true
+  namespace: voice_synthesis
+  directory: null           # null -> foundation/cache/data
+
+profiles:
+  directory: null          # null -> voice_engine/voices/profiles
+  require_consent: true
+
+pronunciation:
+  lexicons: []              # extra lexicon YAML paths merged over the built-in one
+
+emotion:
+  strategies: {}            # engine_id -> strategy override (exaggeration|instruct|hint|none)
+
+streaming:
+  chunk_ms: 200
+  sample_rate: null         # null = engine-native; 8000/16000 for telephony/conversational
+  max_sentence_chars: 300   # fallback chunker: max characters per synthesized chunk
+
+export:
+  format: wav
+  peak_dbfs: -1.0           # peak-normalization target; null disables

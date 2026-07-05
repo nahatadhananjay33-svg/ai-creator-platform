@@ -1,0 +1,1 @@
+﻿"""Talking-head video generation (Phase A4). Consumes voice_engine.interfaces.SynthesisResult. Interfaces follow the platform architecture (docs/ARCHITECTURE.md); implementation lands in the phase noted."""

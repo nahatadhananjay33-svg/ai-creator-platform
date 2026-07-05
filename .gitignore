@@ -1,0 +1,100 @@
+# =============================================================================
+# AI Creator Platform — .gitignore
+# Policy: source, configs, docs, tests, and small text datasets are committed.
+# Everything regenerable (venvs, caches, model weights, benchmark outputs,
+# generated media, logs) is ignored. See docs/ for the committed record.
+# =============================================================================
+
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments (all variants, incl. the platform's per-model venvs)
+.venv/
+venv/
+env/
+ENV/
+.venvs/
+
+# --- Tooling / test caches ----------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Generic temporary / cache / log files ------------------------------------
+*.log
+*.tmp
+*.cache
+*.bak
+*.pid
+
+# --- Archived / superseded reports (regenerable; not for version control) -----
+archive/
+
+# --- Local tool state (keep a shared .claude/settings.json if ever added) -----
+.claude/settings.local.json
+.claude/*.lock
+
+# --- Platform runtime artifacts (all regenerable — never commit) --------------
+foundation/cache/data/
+voice_engine/output/
+avatar_engine/output/
+voice_engine/voices/profiles/
+**/output/runs/
+**/output/installs/
+**/output/validation/
+
+# Root validation logs (regenerable)
+*_validation_log.txt
+
+# Avatar benchmark assets: per the dir README, only the README is committed;
+# portraits are licensed/consented local files, driving audio is regenerated.
+avatar_engine/datasets/data/assets/*
+!avatar_engine/datasets/data/assets/README.md
+
+# --- Model weights / checkpoints / downloaded assets --------------------------
+**/model_weights/
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.gguf
+*.bin
+
+# --- Model / framework caches (Hugging Face, Torch, CUDA) ---------------------
+.cache/
+**/.cache/
+hf_cache/
+huggingface_cache/
+.torch/
+*.nv
+
+# --- Generated / temporary media (audio, video) -------------------------------
+# These are produced by benchmarks and demos; regenerate rather than commit.
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+# Keep dataset/asset documentation (not media, but explicit for clarity):
+!voice_engine/datasets/reference_audio/README.md
+!avatar_engine/datasets/data/assets/README.md
+
+# --- OS / editor --------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

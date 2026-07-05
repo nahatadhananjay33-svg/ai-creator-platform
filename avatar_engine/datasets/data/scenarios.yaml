@@ -1,0 +1,116 @@
+description: >
+  Avatar benchmark scenarios. Scripts reuse the voice benchmark's real-estate
+  domain (builder names, RERA numbers, pricing) so lip-sync stress covers the
+  same entities the platform will actually speak. Driving audio is generated
+  with the Phase A1 voice engine (see data/assets/README.md); source portraits
+  are licensed/consented photos added by the team.
+version: "1"
+
+scenarios:
+  - id: neutral-intro-en
+    category: neutral_speech
+    language: en
+    target_duration_s: 12
+    script: >
+      Hello, and welcome to the property tour. I am your virtual host, and
+      today we will walk through everything this project has to offer.
+    evaluation_focus: [lip_sync, video_quality]
+    notes: Frontal portrait, calm delivery — the baseline case.
+
+  - id: neutral-pricing-en
+    category: neutral_speech
+    language: en
+    target_duration_s: 15
+    script: >
+      The two bedroom units start at forty eight lakh rupees, with an initial
+      booking amount of one lakh fifty one thousand.
+    evaluation_focus: [lip_sync]
+    notes: Numbers force precise bilabial/fricative sequences.
+
+  - id: expressive-launch-en
+    category: expressive_speech
+    language: en
+    target_duration_s: 15
+    script: >
+      This is huge! The launch weekend sold out in six hours — six hours! I
+      genuinely cannot wait to show you why everyone is so excited.
+    evaluation_focus: [expression_quality, motion_realism]
+    notes: Exclamations should raise brows/energy; flat faces score low.
+
+  - id: long-narration-en
+    category: long_narration
+    language: en
+    target_duration_s: 75
+    script: >
+      Let me walk you through the full story of this township. It began in
+      twenty nineteen, when the master plan was first approved. Phase one
+      delivered four towers on schedule. Phase two added the clubhouse, the
+      swimming pool, and the retail arcade. Phase three, launching now, brings
+      the sky villas everyone has been asking about. Along the way the
+      developer maintained a delivery record that very few in this market can
+      match, and the resale numbers reflect that trust. By the end of this
+      video you will know exactly which unit type fits your family and your
+      budget, and what the next steps look like.
+    evaluation_focus: [identity_consistency, temporal_consistency]
+    notes: Primary identity-drift probe; sample frames across the full length.
+
+  - id: fast-specs-en
+    category: fast_speech
+    language: en
+    target_duration_s: 12
+    script: >
+      Quick recap: three towers, twenty two floors, six units per floor, two
+      basements, five hundred and twelve apartments, possession December
+      twenty twenty seven.
+    evaluation_focus: [lip_sync, temporal_consistency]
+    notes: Rapid enumeration — lip-sync degrades first here.
+
+  - id: hindi-welcome-hi
+    category: hindi_speech
+    language: hi
+    target_duration_s: 12
+    script: >
+      नमस्ते! आज हम आपको इस प्रोजेक्ट की पूरी जानकारी देंगे। कीमत, लोकेशन और
+      सुविधाएँ — सब कुछ इसी वीडियो में।
+    evaluation_focus: [lip_sync]
+    notes: Devanagari phonemes; most models are trained EN/ZH only.
+
+  - id: head-movement-en
+    category: head_movement
+    language: en
+    target_duration_s: 15
+    script: >
+      Look to the left, and you will see the lake. Over on the right side is
+      the school. And straight ahead, that is the city skyline.
+    evaluation_focus: [head_movement, motion_realism]
+    notes: Directional language invites natural head turns; statues score low.
+
+  - id: side-pose-en
+    category: side_pose_source
+    language: en
+    target_duration_s: 10
+    script: >
+      Even from this angle, you can tell the finish quality is exceptional.
+    source_image: portrait_three_quarter.png
+    evaluation_focus: [identity_consistency, video_quality]
+    notes: Three-quarter source portrait; frontal-only models warp here.
+
+  - id: silence-pauses-en
+    category: silence_segments
+    language: en
+    target_duration_s: 15
+    script: >
+      The offer closes on Sunday. ... Think about that. ... Sunday.
+    evaluation_focus: [lip_sync, motion_realism]
+    notes: Mouth must fully close in pauses; jitter during silence is a
+      classic failure mode.
+
+  - id: stylized-avatar-en
+    category: stylized_source
+    language: en
+    target_duration_s: 10
+    script: >
+      Hi there! I am the animated guide for this project walkthrough.
+    source_image: portrait_stylized.png
+    evaluation_focus: [video_quality, expression_quality]
+    notes: Illustrated/3D-render source — tests generalization beyond photos.

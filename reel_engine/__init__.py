@@ -1,0 +1,1 @@
+﻿"""Reel Engine (Phase A5): automatic reel assembly composing script/voice/avatar/caption engines. Interfaces follow the platform architecture (docs/ARCHITECTURE.md); implementation lands in the phase noted."""

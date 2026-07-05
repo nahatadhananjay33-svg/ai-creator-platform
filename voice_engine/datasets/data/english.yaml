@@ -1,0 +1,149 @@
+language: en
+version: "1.0"
+description: >
+  English benchmark prompts for real-estate voice AI and content creation.
+  Stresses Indian named entities, RERA numbers, phone numbers, prices in
+  lakh/crore units, long narration, and conversational dialogue.
+
+items:
+  - id: en-prop-001
+    category: property_discussion
+    text: >
+      This is a three BHK apartment on the seventh floor with a carpet area of
+      1,450 square feet, two covered parking spaces, and a modular kitchen.
+      The tower faces east, so the living room gets excellent morning light.
+    expected_scripts: [Latin]
+
+  - id: en-prop-002
+    category: property_discussion
+    text: >
+      The society has a clubhouse, a twenty-five meter swimming pool, a gym,
+      and around sixty percent open green area. Maintenance is three rupees
+      fifty paise per square foot per month.
+    expected_scripts: [Latin]
+
+  - id: en-builder-001
+    category: builder_name
+    text: >
+      The project is developed by Avinash Group, one of the most trusted
+      builders in Raipur. They have also partnered with Shree Balaji
+      Constructions and Dhillon Buildcon for earlier phases.
+    expected_scripts: [Latin]
+    notes: Indian builder names in English sentence context.
+
+  - id: en-project-001
+    category: project_name
+    text: >
+      Avinash Capital Homes Two is located on the Old Dhamtari Road, while
+      Wallfort Elegante and Singapour City are closer to the airport corridor
+      in Nava Raipur.
+    expected_scripts: [Latin]
+
+  - id: en-rera-001
+    category: rera_number
+    text: >
+      The project is registered with the Chhattisgarh RERA authority. The
+      registration number is P C G R E R A 2 5 0 5 1 8 0 0 0 5 4 2. You can
+      verify it on the rera dot cgstate dot gov dot in portal.
+    expected_scripts: [Latin]
+    notes: Letter-by-letter read-out; tests spelled-sequence stability.
+
+  - id: en-site-001
+    category: site_visit
+    text: >
+      I can arrange a site visit for you this Saturday at eleven thirty in
+      the morning. Our executive will meet you at the project gate on Ring
+      Road Number One, and the visit takes about forty-five minutes.
+    expected_scripts: [Latin]
+
+  - id: en-appt-001
+    category: appointment
+    text: >
+      Your appointment is confirmed for Tuesday, the fourteenth of July, at
+      four PM at our Telibandha office. Please bring your Aadhaar card and a
+      copy of your PAN card for the booking process.
+    expected_scripts: [Latin]
+
+  - id: en-addr-001
+    category: address
+    text: >
+      The sample flat is at Plot Number 12-B, Sector 27, Nava Raipur Atal
+      Nagar, opposite the Central Park entrance, Chhattisgarh, PIN code
+      four nine two zero zero two.
+    expected_scripts: [Latin]
+
+  - id: en-phone-001
+    category: phone_number
+    text: >
+      You can reach our sales team at nine eight two six zero one four
+      three five seven, or on the landline at zero seven seven one, two
+      four four, one zero one zero, between ten AM and seven PM.
+    expected_scripts: [Latin]
+
+  - id: en-price-001
+    category: pricing
+    text: >
+      The two BHK starts at forty-two lakh ninety thousand rupees, and the
+      three BHK premium units go up to one crore five lakhs, all inclusive
+      of GST, registration, and one covered car park.
+    expected_scripts: [Latin]
+    notes: Lakh/crore units — critical for Indian real estate.
+
+  - id: en-loan-001
+    category: loan
+    text: >
+      With a twenty percent down payment, your home loan EMI for a fifty
+      lakh loan at eight point five percent interest over twenty years comes
+      to about forty-three thousand four hundred rupees per month. We have
+      tie-ups with SBI, HDFC, and LIC Housing Finance.
+    expected_scripts: [Latin]
+
+  - id: en-narr-001
+    category: long_narration
+    text: >
+      Welcome to this complete walkthrough of Capital Greens, Raipur's newest
+      integrated township. Spread across thirty-two acres along the Vidhan
+      Sabha Road, the township brings together residential towers, a high
+      street retail zone, and a dedicated senior living block. As you enter
+      through the grand boulevard, you will notice the seventy-foot-wide
+      internal roads lined with flowering trees. The first three towers,
+      Amber, Coral, and Jade, offer two and three BHK residences ranging
+      from 1,050 to 1,850 square feet. Every apartment is Vastu compliant,
+      with no shared walls, cross ventilation, and full-height windows. The
+      township also includes a two-acre central park, an amphitheater, a
+      skating rink, and a dedicated five-a-side football turf. Possession
+      for phase one is scheduled for December 2027, and the project is fully
+      approved by all statutory authorities.
+    expected_scripts: [Latin]
+    notes: ~950 characters; long-form stability and narration quality probe.
+
+  - id: en-conv-001
+    category: conversation
+    text: >
+      Good afternoon! Am I speaking with Mr. Sharma? Perfect. I'm calling
+      from Skyline Realty about the villa plot you enquired about yesterday.
+      Do you have two minutes? Great. So the plot you shortlisted is the
+      corner one, thirty by fifty feet, facing the park. Would you prefer a
+      site visit this weekend, or should I first send you the layout and
+      pricing on WhatsApp?
+    expected_scripts: [Latin]
+    notes: Telephony persona; question intonation and turn-taking rhythm.
+
+  - id: en-conv-002
+    category: conversation
+    text: >
+      I completely understand your concern about the possession delay. Let
+      me clarify — the earlier phase was delayed because of the new airport
+      road alignment, but this phase already has its completion certificate
+      applied. If you want, I can email you the RERA quarterly progress
+      report right now. Does that work for you?
+    expected_scripts: [Latin]
+
+  - id: en-code-001
+    category: code_switching
+    text: >
+      The booking amount is just fifty-one thousand rupees, sir. Baaki sab
+      documentation hum handle kar lenge, you just need to sign the
+      application form and share your PAN card copy.
+    expected_scripts: [Latin]
+    notes: English-dominant sentence with a Hindi clause — mild code-switch probe.
