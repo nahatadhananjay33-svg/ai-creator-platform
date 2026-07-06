@@ -141,16 +141,23 @@ def build_prefetch_code(repo_dir: Path) -> str:
         "import os, sys, subprocess, importlib.util, pathlib\n"
         f"repo = pathlib.Path(r'{repo}')\n"
         "os.chdir(repo)\n"
+        # uv venvs aren't activated, so the venv console scripts (mim,
+        # huggingface-cli, gdown) aren't on PATH. Put the venv bin first so
+        # download_weights.sh and mim resolve them.
+        "bindir = str(pathlib.Path(sys.executable).parent)\n"
+        "env = dict(os.environ)\n"
+        "env['PATH'] = bindir + os.pathsep + env.get('PATH', '')\n"
         "if importlib.util.find_spec('pip') is None:\n"
         "    import ensurepip; ensurepip.bootstrap()\n"
         # MMLab stack (MuseTalk's documented versions) via openmim.
-        "subprocess.run([sys.executable, '-m', 'pip', 'install', '-U', 'openmim'], check=True)\n"
+        "subprocess.run([sys.executable, '-m', 'pip', 'install', '-U', 'openmim'], check=True, env=env)\n"
+        "mim = os.path.join(bindir, 'mim')\n"
         "for pkg in ('mmengine', 'mmcv==2.0.1', 'mmdet==3.1.0', 'mmpose==1.1.0'):\n"
-        "    subprocess.run([sys.executable, '-m', 'mim', 'install', pkg], check=True)\n"
+        "    subprocess.run([mim, 'install', pkg], check=True, env=env)\n"
         # Authoritative weight download (idempotent; hf/gdown skip valid files).
         "dl = repo / 'download_weights.sh'\n"
         "if dl.exists():\n"
-        "    subprocess.run(['bash', str(dl)], check=True)\n"
+        "    subprocess.run(['bash', str(dl)], check=True, env=env)\n"
         "else:\n"
         "    print('WARNING: download_weights.sh not found in repo')\n"
         "print('musetalk setup complete')\n"

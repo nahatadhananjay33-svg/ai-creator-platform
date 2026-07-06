@@ -97,7 +97,12 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
              "librosa", "einops", "gdown", "requests", "huggingface_hub[cli]",
              "openmim") + _PLATFORM_CORE,
         ),
-        verify_imports=("diffusers", "mmpose", "cv2"),
+        # verify_imports runs BEFORE git clone + prefetch_code, so it must only
+        # list packages the pip_groups install. mmpose/mmcv are installed by the
+        # prefetch (via `mim`), so they are NOT verified here — otherwise the
+        # install aborts before cloning the repo and downloading weights. The
+        # adapter's IMPORT_PACKAGES still verifies mmpose at runtime.
+        verify_imports=("diffusers", "cv2"),
         git_repo="https://github.com/TMElyralab/MuseTalk.git",
         # Installs the MMLab stack (mim) and downloads all weights via the repo's
         # own download_weights.sh (5 HF repos + gdrive + a PyTorch URL). A4.0.

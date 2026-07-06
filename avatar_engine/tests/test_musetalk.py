@@ -31,8 +31,29 @@ def test_musetalk_install_spec_complete():
     assert spec.torch == "auto"                       # GPU-aware wheels (A3.8)
     assert spec.prefetch_code and "download_weights.sh" in spec.prefetch_code
     assert "mim" in spec.prefetch_code                # MMLab stack
-    assert "mmpose" in spec.verify_imports
     assert spec.supported_on_this_platform in (True, False)  # Linux-gated
+
+
+def test_verify_imports_only_covers_pip_group_packages():
+    # Regression (A4.0 fix): verify_imports runs BEFORE git clone + prefetch, so
+    # it must NOT list packages installed by the prefetch (mmpose/mmcv via mim) —
+    # otherwise the install aborts before cloning the repo / downloading weights.
+    spec = INSTALL_SPECS["musetalk"]
+    assert "mmpose" not in spec.verify_imports
+    assert "mmcv" not in spec.verify_imports
+    pip_group_pkgs = " ".join(pkg for group in spec.pip_groups for pkg in group)
+    for name in spec.verify_imports:
+        # diffusers/cv2 come from the pip_groups (cv2 via opencv-python).
+        assert name in pip_group_pkgs or name == "cv2", name
+    # mmpose is still verified at RUNTIME by the adapter's diagnostics.
+    assert "mmpose" in MuseTalkAdapter.IMPORT_PACKAGES
+
+
+def test_prefetch_puts_venv_bin_on_path():
+    # download_weights.sh calls huggingface-cli/gdown from the venv bin, which is
+    # not on PATH in an unactivated uv venv — the prefetch must add it.
+    code = INSTALL_SPECS["musetalk"].prefetch_code
+    assert "bindir" in code and "PATH" in code and "env=env" in code
 
 
 # --------------------------------------------------------------- weights
