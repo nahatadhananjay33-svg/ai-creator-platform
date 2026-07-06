@@ -35,6 +35,22 @@ REPOS_DIR = PROJECT_ROOT / ".venvs" / "_repos"
 #: CPU wheel index for torch when CUDA is unusable.
 TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
 
+#: uv downloads through its own (rustls) TLS stack; some networks/proxies reject
+#: its handshake ("received fatal alert: HandshakeFailure") for download.pytorch.org
+#: even though CPython's pip — using OpenSSL — connects fine. When uv fails with one
+#: of these markers the installer retries the *same* packages/index with pip instead
+#: of aborting. Matched case-insensitively against uv's stderr.
+TLS_FALLBACK_MARKERS = (
+    "handshakefailure",
+    "handshake failure",
+    "handshake failed",
+    "received fatal alert",
+    "ssl",
+    "tls",
+    "certificate",
+    "failed to fetch",
+)
+
 
 def model_venv_python(model_id: str, venvs_dir: Path | None = None) -> Path:
     """Interpreter path for a model's isolated venv.
@@ -164,18 +180,60 @@ class InstallationManager:
             raise RuntimeError(f"venv creation failed: {proc.stderr[-800:]}")
         return python
 
+    @staticmethod
+    def _is_tls_fetch_failure(stderr: str) -> bool:
+        """True when uv's stderr looks like a TLS/handshake/fetch failure."""
+        low = (stderr or "").lower()
+        return any(marker in low for marker in TLS_FALLBACK_MARKERS)
+
+    def _ensure_pip(self, python: Path, env_vars: dict[str, str] | None = None) -> None:
+        """Guarantee ``python -m pip`` works in the venv before the pip fallback.
+
+        uv-created venvs ship without pip, so the fallback bootstraps it via the
+        stdlib ``ensurepip`` first. A no-op when pip is already importable.
+        """
+        if self._run([python, "-m", "pip", "--version"]).returncode == 0:
+            return
+        logger.info("bootstrapping pip via ensurepip for TLS fallback")
+        self._run([python, "-m", "ensurepip", "--upgrade"], env_vars=env_vars)
+
     def _pip_install(self, python: Path, packages: Sequence[str],
                      env_vars: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        if self._uv:
-            cmd = [self._uv, "pip", "install", "--python", str(python), *packages]
-        else:
-            cmd = [str(python), "-m", "pip", "install", *packages]
-        proc = self._run(cmd, env_vars=env_vars)
+        pip_cmd = [str(python), "-m", "pip", "install", *packages]
+
+        if not self._uv:  # pip is primary when uv is unavailable
+            proc = self._run(pip_cmd, env_vars=env_vars)
+            if proc.returncode != 0:  # one retry — transient network failures are common
+                logger.warning("pip install failed, retrying once",
+                               extra={"context": {"packages": " ".join(packages)[:120]}})
+                proc = self._run(pip_cmd, env_vars=env_vars)
+            return proc
+
+        # uv stays primary.
+        uv_cmd = [self._uv, "pip", "install", "--python", str(python), *packages]
+        proc = self._run(uv_cmd, env_vars=env_vars)
         if proc.returncode != 0:  # one retry — transient network failures are common
-            logger.warning("pip install failed, retrying once",
+            logger.warning("uv install failed, retrying once",
                            extra={"context": {"packages": " ".join(packages)[:120]}})
-            proc = self._run(cmd, env_vars=env_vars)
-        return proc
+            proc = self._run(uv_cmd, env_vars=env_vars)
+        if proc.returncode == 0:
+            return proc
+
+        # uv failed. Only for the TLS/handshake/fetch failure class does pip's
+        # OpenSSL stack tend to succeed where uv's rustls stack cannot — fall back
+        # to pip with the identical package list and index-url. Any other failure
+        # (e.g. no matching distribution) is returned as-is: pip would fail too.
+        if not self._is_tls_fetch_failure(proc.stderr):
+            return proc
+        logger.warning("uv install hit a TLS/fetch failure; falling back to pip",
+                       extra={"context": {"packages": " ".join(packages)[:120]}})
+        self._ensure_pip(python, env_vars)
+        fb = self._run(pip_cmd, env_vars=env_vars)
+        if fb.returncode != 0:  # one retry
+            logger.warning("pip fallback failed, retrying once",
+                           extra={"context": {"packages": " ".join(packages)[:120]}})
+            fb = self._run(pip_cmd, env_vars=env_vars)
+        return fb
 
     @staticmethod
     def resolve_torch_install(spec: InstallSpec, gpu_target: bool) -> tuple[list[str], str]:
