@@ -108,9 +108,14 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         # own download_weights.sh (5 HF repos + gdrive + a PyTorch URL). A4.0.
         prefetch_code=build_musetalk_prefetch(REPOS_DIR / "musetalk"),
         approx_download_gb=10.0,
-        # GPU-aware (A3.8): CUDA wheels on a GPU host, CPU otherwise.
+        # MuseTalk pins torch 2.0.1 / cu118 (README) — REQUIRED: `mim install
+        # mmcv==2.0.1` only has prebuilt wheels for torch 2.0.x + cu118. With an
+        # unpinned (latest) torch, mmcv 2.0.1 has no matching wheel, mim falls
+        # back to a source build, and the prefetch fails ("checkpoint prefetch
+        # failed"). GPU-aware (A3.8): cu118 index on a GPU host, CPU otherwise.
         torch="auto",
-        torch_packages=("torch", "torchvision", "torchaudio"),
+        torch_packages=("torch==2.0.1", "torchvision==0.15.2", "torchaudio==2.0.2"),
+        torch_cuda_index="https://download.pytorch.org/whl/cu118",
         supported_on_this_platform=not _IS_WINDOWS,
         platform_notes="mmcv/mmpose compile only on Linux/CUDA (Colab). The installer "
         "runs `mim install` for mmengine/mmcv/mmdet/mmpose and the repo's "

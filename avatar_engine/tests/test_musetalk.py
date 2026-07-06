@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 
 from foundation.benchmarking.results import CaseResult, CaseStatus, Measurement, RunResult
+from foundation.model_manager.installer import InstallationManager
 from avatar_engine.models import ADAPTER_CLASSES, create_adapter
 from avatar_engine.models import musetalk_weights as mw
 from avatar_engine.models.musetalk import MuseTalkAdapter
@@ -47,6 +48,23 @@ def test_verify_imports_only_covers_pip_group_packages():
         assert name in pip_group_pkgs or name == "cv2", name
     # mmpose is still verified at RUNTIME by the adapter's diagnostics.
     assert "mmpose" in MuseTalkAdapter.IMPORT_PACKAGES
+
+
+def test_musetalk_torch_pinned_to_match_mmcv():
+    # Regression (A4.0 prefetch fix): the prefetch runs `mim install mmcv==2.0.1`,
+    # which only has prebuilt wheels for torch 2.0.x + cu118 (MuseTalk's documented
+    # environment). An unpinned/latest torch -> no matching mmcv wheel -> mim source
+    # build -> the prefetch fails ("checkpoint prefetch failed"). Torch MUST be
+    # pinned to 2.0.1 / cu118, exactly like SadTalker.
+    spec = INSTALL_SPECS["musetalk"]
+    assert spec.torch_packages == ("torch==2.0.1", "torchvision==0.15.2", "torchaudio==2.0.2")
+    assert spec.torch_cuda_index == "https://download.pytorch.org/whl/cu118"
+    assert "mmcv==2.0.1" in spec.prefetch_code  # the pin that requires this torch
+    # On a GPU host the installer must emit the matching cu118 wheels.
+    args, label = InstallationManager.resolve_torch_install(spec, gpu_target=True)
+    assert "torch==2.0.1" in args and "cu118" in label
+    # ...and never the latest/unpinned torch that breaks the mmcv wheel match.
+    assert "torch" not in args or "torch==2.0.1" in args
 
 
 def test_prefetch_puts_venv_bin_on_path():
