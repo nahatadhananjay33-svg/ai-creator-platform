@@ -16,7 +16,8 @@ from __future__ import annotations
 import sys
 
 from foundation.model_manager.installer import REPOS_DIR, InstallSpec
-from avatar_engine.models.liveportrait_weights import build_prefetch_code
+from avatar_engine.models.liveportrait_weights import build_prefetch_code as build_liveportrait_prefetch
+from avatar_engine.models.musetalk_weights import build_prefetch_code as build_musetalk_prefetch
 
 _IS_WINDOWS = sys.platform == "win32"
 _PLATFORM_CORE = ("pyyaml", "psutil", "numpy", "opencv-python", "imageio-ffmpeg")
@@ -78,7 +79,7 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         # Downloads the humans-mode pretrained weights (~660 MB) from
         # HF KlingTeam/LivePortrait into pretrained_weights/ (A3.9). Resumable,
         # cached, skips already-valid files (see liveportrait_weights.py).
-        prefetch_code=build_prefetch_code(REPOS_DIR / "liveportrait"),
+        prefetch_code=build_liveportrait_prefetch(REPOS_DIR / "liveportrait"),
         approx_download_gb=2.7,
         # GPU-aware (A3.8): CUDA wheels on a GPU host, CPU otherwise. torchvision
         # is required by LivePortrait's transforms.
@@ -90,16 +91,25 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
     ),
     "musetalk": InstallSpec(
         model_id="musetalk",
+        python_version="3.10",
         pip_groups=(
-            ("diffusers>=0.30", "transformers", "accelerate", "soundfile", "librosa") + _PLATFORM_CORE,
-            ("openmim",),  # then: mim install mmengine mmcv mmdet mmpose (per README)
+            ("diffusers>=0.30", "transformers", "accelerate", "omegaconf", "soundfile",
+             "librosa", "einops", "gdown", "requests", "huggingface_hub[cli]",
+             "openmim") + _PLATFORM_CORE,
         ),
-        verify_imports=("diffusers", "cv2"),
+        verify_imports=("diffusers", "mmpose", "cv2"),
+        git_repo="https://github.com/TMElyralab/MuseTalk.git",
+        # Installs the MMLab stack (mim) and downloads all weights via the repo's
+        # own download_weights.sh (5 HF repos + gdrive + a PyTorch URL). A4.0.
+        prefetch_code=build_musetalk_prefetch(REPOS_DIR / "musetalk"),
         approx_download_gb=10.0,
-        torch="cuda",
+        # GPU-aware (A3.8): CUDA wheels on a GPU host, CPU otherwise.
+        torch="auto",
+        torch_packages=("torch", "torchvision", "torchaudio"),
         supported_on_this_platform=not _IS_WINDOWS,
-        platform_notes="mmcv/mmpose compiled deps: use Linux/WSL2. Clone TMElyralab/MuseTalk, "
-        "run mim install steps, download weights via download_weights.sh",
+        platform_notes="mmcv/mmpose compile only on Linux/CUDA (Colab). The installer "
+        "runs `mim install` for mmengine/mmcv/mmdet/mmpose and the repo's "
+        "download_weights.sh; native Windows is unsupported.",
     ),
     "latentsync": InstallSpec(
         model_id="latentsync",

@@ -22,7 +22,7 @@ from avatar_engine.reporting.comparison import write_comparison_report  # noqa: 
 
 RUNS_DIR = Path(__file__).resolve().parents[1] / "output" / "runs"
 OUT_DIR = Path(__file__).resolve().parents[1] / "output" / "comparisons"
-_MODELS = ("sadtalker", "liveportrait")
+_MODELS = ("sadtalker", "liveportrait", "musetalk")
 
 
 def _load(run_dir: Path) -> RunResult | None:

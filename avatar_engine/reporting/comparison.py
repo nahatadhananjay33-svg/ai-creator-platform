@@ -97,14 +97,15 @@ def write_comparison_report(runs: list[RunResult], out_dir: Path) -> dict[str, P
 
     models = [s.model_id for s in summaries]
     lines = [
-        "# Model Comparison — SadTalker vs LivePortrait", "",
+        "# Avatar Model Comparison", "",
         f"Generated: {generated_at}", "",
+        f"Models compared: {', '.join(models) if models else '—'}.", "",
         "All values are **measured** means over passed cases from the existing "
         "benchmark framework — no subjective judgement.", "",
-        "> Note: SadTalker is **audio-driven** (lip-syncs to the scenario speech) "
-        "while LivePortrait is **video-driven** (reenacts from a driving clip). "
-        "They share the same source portraits and scenarios; audio lip-sync metrics "
-        "are only meaningful for the audio-driven model.", "",
+        "> Note: SadTalker and MuseTalk are **audio-driven** (lip-sync to the "
+        "scenario speech) while LivePortrait is **video-driven** (reenacts from a "
+        "driving clip). They share the same source portraits and scenarios; audio "
+        "lip-sync metrics are only meaningful for the audio-driven models.", "",
         "| Metric | " + " | ".join(models) + " |",
         "|" + "---|" * (len(models) + 1),
     ]

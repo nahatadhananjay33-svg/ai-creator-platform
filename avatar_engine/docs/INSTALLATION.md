@@ -1,5 +1,13 @@
 # Avatar Model Installation
 
+> **MuseTalk (Phase A4.0).** `install_models --models musetalk` clones
+> `TMElyralab/MuseTalk`, installs the MMLab stack via `mim`, and downloads
+> ~10 GB of weights via the repo's `download_weights.sh` (5 HF repos + gdrive).
+> Verify with `python -m avatar_engine.scripts.validate_musetalk_weights`.
+> **Linux/CUDA only** (mmcv/mmpose) — runs on Colab, not native Windows. It is
+> audio-driven like SadTalker (portrait + audio). See
+> [`MUSE_TALK.md`](MUSE_TALK.md).
+
 > **LivePortrait weights (Phase A3.9).** The installer now auto-downloads
 > LivePortrait's 8 humans-mode pretrained weights (~660 MB) from HF
 > `KlingTeam/LivePortrait` into `pretrained_weights/` via the spec's

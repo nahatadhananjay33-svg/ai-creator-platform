@@ -145,7 +145,7 @@ def test_mock_available_in_process():
 
 
 def test_planned_adapter_reports_not_implemented():
-    adapter = create_adapter("musetalk")
+    adapter = create_adapter("echomimic-v3")  # still a planned placeholder
     diag = adapter.diagnostics()
     assert diag.available is False
     assert "planned" in diag.reason.lower()
@@ -187,7 +187,7 @@ def test_unavailable_adapter_load_raises_with_reason(tmp_path):
 # --------------------------------------------------------------- validator + report
 def test_validator_records_diagnostic_reason():
     validator = AvatarModelValidator(Path.cwd() / "avatar_engine" / "output" / "validation")
-    result = validator.validate(create_adapter("musetalk"))
+    result = validator.validate(create_adapter("echomimic-v3"))  # still planned
     assert result.dependencies_ok is False
     assert result.diagnostics is not None
     assert "planned" in (result.error or "").lower()

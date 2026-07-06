@@ -19,6 +19,7 @@ from avatar_engine.models.diagnostics import AdapterDiagnostic
 from avatar_engine.models.interface import GenerationRequest, GenerationResult
 from avatar_engine.models.liveportrait import LivePortraitAdapter
 from avatar_engine.models.mock import MockAvatarAdapter
+from avatar_engine.models.musetalk import MuseTalkAdapter
 from avatar_engine.models.sadtalker import SadTalkerAdapter
 from avatar_engine.research.catalog import production_candidates
 
@@ -71,9 +72,10 @@ def _planned_adapter_class(model_id: str) -> Type[BaseAvatarAdapter]:
 ADAPTER_CLASSES: dict[str, Type[BaseAvatarAdapter]] = {
     "mock": MockAvatarAdapter,
     **{p.model_id: _planned_adapter_class(p.model_id) for p in production_candidates()},
-    # Real adapters (Phase A3.5) override their planned placeholders:
-    "sadtalker": SadTalkerAdapter,
-    "liveportrait": LivePortraitAdapter,
+    # Real adapters override their planned placeholders:
+    "sadtalker": SadTalkerAdapter,       # A3.5
+    "liveportrait": LivePortraitAdapter,  # A3.9
+    "musetalk": MuseTalkAdapter,          # A4.0
 }
 
 
