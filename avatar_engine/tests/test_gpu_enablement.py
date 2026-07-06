@@ -75,6 +75,56 @@ def test_no_avatar_spec_hardcodes_cpu_index_in_pip_groups():
             assert TORCH_CPU_INDEX not in group, f"{mid} hardcodes CPU torch in a pip group"
 
 
+# --------------------------------------------------------------- A4.0 MuseTalk dependency pins
+def _musetalk_pins() -> dict[str, str]:
+    """Map package name -> pinned version from MuseTalk's single pip group."""
+    (group,) = INSTALL_SPECS["musetalk"].pip_groups
+    pins: dict[str, str] = {}
+    for req in group:
+        if "==" in req:
+            name, ver = req.split("==", 1)
+            # normalise `huggingface_hub[cli]` -> `huggingface_hub`
+            pins[name.split("[", 1)[0]] = ver
+    return pins
+
+
+def test_musetalk_pins_diffusers_below_torch_xpu_era():
+    # Regression for A4.0: diffusers 0.39 references torch.xpu at import time,
+    # which torch 2.0.1 (MuseTalk's pin) lacks -> AttributeError. Upstream pins
+    # 0.30.2, which has no torch.xpu reference. Never let it float to >=0.30.
+    pins = _musetalk_pins()
+    assert pins.get("diffusers") == "0.30.2"
+
+
+def test_musetalk_dependency_stack_matches_upstream_requirements():
+    # These four must move together: MuseTalk's requirements.txt validates this
+    # exact combination against torch 2.0.1 / cu118. A bare (unpinned) transformers
+    # or huggingface_hub resolves to a 5.x / 1.x release that drops APIs the older
+    # diffusers/transformers still call.
+    pins = _musetalk_pins()
+    assert pins.get("transformers") == "4.39.2"
+    assert pins.get("accelerate") == "0.28.0"
+    assert pins.get("huggingface_hub") == "0.30.2"
+
+
+def test_musetalk_pins_numpy_below_2_for_torch_201_abi():
+    # torch 2.0.1 is ABI-incompatible with numpy 2.x; upstream pins 1.23.5.
+    pins = _musetalk_pins()
+    assert pins.get("numpy") == "1.23.5"
+    assert not pins["numpy"].startswith("2."), "torch 2.0.1 cannot use numpy 2.x"
+
+
+def test_musetalk_leaves_no_unpinned_core_dep_that_broke_the_import():
+    # Guard against a regression where any of the compatibility-critical deps
+    # slips back to an unpinned (bleeding-edge) spec in the pip group.
+    (group,) = INSTALL_SPECS["musetalk"].pip_groups
+    critical = ("diffusers", "transformers", "accelerate", "huggingface_hub")
+    for req in group:
+        name = req.split("==", 1)[0].split("[", 1)[0]
+        if name in critical:
+            assert "==" in req, f"MuseTalk dep {name!r} must stay version-pinned"
+
+
 # --------------------------------------------------------------- gpu_install_target
 def _env(*, has_gpu: bool, modern_driver: bool, torch_cuda: bool) -> EnvironmentReport:
     gpus = (GpuInfo(name="Tesla T4", vram_total_mb=15360),) if has_gpu else ()

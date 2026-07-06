@@ -92,10 +92,23 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
     "musetalk": InstallSpec(
         model_id="musetalk",
         python_version="3.10",
+        # Versions pinned to MuseTalk's official requirements.txt (A4.0 fix).
+        # Unpinned (`diffusers>=0.30`, bare transformers/accelerate/hub) resolved
+        # to the bleeding edge: diffusers 0.39 builds module-level dicts
+        # (BACKEND_EMPTY_CACHE, ...) that reference `torch.xpu.empty_cache` at
+        # IMPORT time, guarded only by is_torch_available() — not hasattr. But
+        # torch 2.0.1 (MuseTalk's pin) predates Intel XPU support, so
+        # `import diffusers` died with "module 'torch' has no attribute 'xpu'".
+        # diffusers 0.30.2 has no torch.xpu reference and imports cleanly on
+        # torch 2.0.1. huggingface_hub is pinned to 0.30.2 because hub 1.x
+        # removed APIs that transformers 4.39.2 / diffusers 0.30.2 still call;
+        # numpy to 1.23.5 (upstream pin) because torch 2.0.1 is ABI-incompatible
+        # with numpy 2.x, and _PLATFORM_CORE's bare "numpy" resolves to 2.x.
         pip_groups=(
-            ("diffusers>=0.30", "transformers", "accelerate", "omegaconf", "soundfile",
-             "librosa", "einops", "gdown", "requests", "huggingface_hub[cli]",
-             "openmim") + _PLATFORM_CORE,
+            ("diffusers==0.30.2", "transformers==4.39.2", "accelerate==0.28.0",
+             "huggingface_hub[cli]==0.30.2", "omegaconf", "soundfile",
+             "librosa", "einops", "gdown", "requests", "openmim",
+             "numpy==1.23.5") + _PLATFORM_CORE,
         ),
         # verify_imports runs BEFORE git clone + prefetch_code, so it must only
         # list packages the pip_groups install. mmpose/mmcv are installed by the
