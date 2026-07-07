@@ -40,6 +40,8 @@ archive/
 # --- Local tool state (keep a shared .claude/settings.json if ever added) -----
 .claude/settings.local.json
 .claude/*.lock
+# atomic-write temp files (e.g. settings.local.json.tmp.<pid>.<hash>)
+.claude/*.tmp.*
 
 # --- Platform runtime artifacts (all regenerable — never commit) --------------
 foundation/cache/data/
