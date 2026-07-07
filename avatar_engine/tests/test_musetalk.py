@@ -30,7 +30,10 @@ def test_musetalk_install_spec_complete():
     spec = INSTALL_SPECS["musetalk"]
     assert spec.git_repo and "TMElyralab/MuseTalk" in spec.git_repo
     assert spec.torch == "auto"                       # GPU-aware wheels (A3.8)
-    assert spec.prefetch_code and "download_weights.sh" in spec.prefetch_code
+    # Prefetch downloads weights straight from the manifest (A4.4), not via the
+    # repo's download_weights.sh (which corrupts our hub pin + forces a bad mirror).
+    assert spec.prefetch_code and "hf_hub_download" in spec.prefetch_code
+    assert "download_weights.sh" not in spec.prefetch_code
     assert "mim" in spec.prefetch_code                # MMLab stack
     assert spec.supported_on_this_platform in (True, False)  # Linux-gated
 
@@ -84,8 +87,8 @@ def test_musetalk_declares_setuptools_for_pkg_resources():
 
 
 def test_prefetch_puts_venv_bin_on_path():
-    # download_weights.sh calls huggingface-cli/gdown from the venv bin, which is
-    # not on PATH in an unactivated uv venv — the prefetch must add it.
+    # `mim` is a venv console script, not on PATH in an unactivated uv venv —
+    # the prefetch must prepend the venv bin so `mim install` resolves it.
     code = INSTALL_SPECS["musetalk"].prefetch_code
     assert "bindir" in code and "PATH" in code and "env=env" in code
 
@@ -166,7 +169,37 @@ def test_prefetch_installs_mmlab_and_downloads(tmp_path):
     assert "openmim" in code and "mim" in code
     for v in ("mmcv==2.0.1", "mmdet==3.1.0", "mmpose==1.1.0"):
         assert v in code
-    assert "download_weights.sh" in code
+    # A4.4: weights come from the manifest (pinned hub API + gdown + urllib), NOT
+    # the repo's download_weights.sh (broke the hub pin, forced a bad mirror,
+    # swallowed failures).
+    assert "download_weights.sh" not in code
+    assert "hf_hub_download" in code and "gdown.download" in code
+    assert "urllib.request.urlretrieve" in code
+
+
+def test_prefetch_download_covers_every_manifest_weight_and_validates(tmp_path):
+    # The embedded specs must carry a source for every weight, and the prefetch
+    # must hard-fail (not silently exit 0) if any required weight is missing after
+    # download — the exact defect that made download_weights.sh report false success.
+    code = mw.build_prefetch_code(tmp_path)
+    for w in mw.MUSETALK_WEIGHTS:
+        assert repr(w.relpath) in code, w.relpath
+    for src in ("TMElyralab/MuseTalk", "stabilityai/sd-vae-ft-mse", "openai/whisper-tiny",
+                "yzd-v/DWPose", "ByteDance/LatentSync",
+                "154JgKpzCPW82qINcVieuPH3fZ2e0P812",
+                "https://download.pytorch.org/models/resnet18-5c106cde.pth"):
+        assert src in code, src
+    assert "required MuseTalk weights missing after download" in code
+
+
+def test_manifest_every_weight_has_exactly_one_source():
+    # Each weight is fetched from exactly one place; HF files carry an hf_filename
+    # that relpath ends with (so the prefetch can derive hf_hub_download's local_dir).
+    for w in mw.MUSETALK_WEIGHTS:
+        sources = [s for s in (w.repo_id, w.gdrive_id, w.url) if s]
+        assert len(sources) == 1, (w.relpath, sources)
+        if w.repo_id:
+            assert w.hf_filename and w.relpath.endswith(w.hf_filename), w.relpath
 
 
 # --------------------------------------------------------------- adapter
