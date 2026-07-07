@@ -11,6 +11,12 @@ Colab reclaims idle runtimes). The goal is that a drop costs little or no work:
 - **watchdog** keeps `sshd` + the tunnel alive and records any new hostname.
 - **`recover`** tells you, after any disconnect, exactly what survived and what to do.
 
+The bootstrap notebook is **self-contained and self-healing**: it bakes in the
+`checkpoint`/`recover`/`dev`/watchdog scripts (so they exist on any branch, even before
+the repo is cloned), installs only what's missing, and re-running only repairs what broke.
+The notebook is version-controlled at [`notebooks/colab_bootstrap.ipynb`](../notebooks/colab_bootstrap.ipynb);
+upload that file to a fresh runtime (it must exist before the clone).
+
 ---
 
 ## 1. Normal startup
@@ -23,23 +29,34 @@ Colab reclaims idle runtimes). The goal is that a drop costs little or no work:
    ssh colab whoami        # expect: root
    ```
    Then in VS Code: **Remote-SSH: Connect to Host… → colab**.
-4. In the VS Code terminal, start a persistent session and launch Claude inside it:
+4. In the VS Code terminal, start your session — `dev` opens tmux **and starts Claude**:
    ```bash
-   dev            # attaches (or creates) the tmux session named "dev"
-   claude         # run Claude Code INSIDE tmux
+   dev            # attaches the "dev" tmux session, or creates it running claude
    ```
 
-> Always run `claude` and long-running commands inside `dev` (tmux). A disconnect then
-> leaves them running; you reattach with `dev` instead of losing the process.
+> `dev` is the one command to run after every (re)connect. It launches Claude inside tmux,
+> so a disconnect leaves it (and any long jobs) running — you just run `dev` again to
+> reattach instead of losing the process. When Claude exits, the pane drops to a shell so
+> the session stays alive.
 
 The expected end-of-bootstrap summary:
 
 ```
-SSH ............ OK
-Tunnel ......... OK
-Git ............ OK
-Claude ......... OK
-GPU ............ OK
+=====================================
+Environment Ready
+SSH ............. OK
+Tunnel .......... OK
+Claude .......... OK
+GPU ............. OK
+CUDA ............ OK
+Git ............. OK
+Branch .......... main
+Commit .......... <hash>
+Checkpoint ...... OK
+Recover ......... OK
+Dev ............. OK
+Watchdog ........ OK
+=====================================
 ```
 
 ---
@@ -53,8 +70,8 @@ If VS Code drops but the Colab runtime is still running:
 2. Open a terminal and reattach your session:
    ```bash
    dev            # your claude session is exactly where you left it
-   recover        # optional: confirm SSH/Tunnel/Git/Claude/GPU
    ```
+   (Optionally run `recover` first to confirm SSH/Tunnel/Git/Claude/GPU.)
 
 No work is lost — the processes kept running inside tmux.
 
@@ -141,13 +158,14 @@ committed. Revoke it from GitHub any time.
 
 | Area | Detail |
 |---|---|
-| Packages | `openssh-server git curl wget nodejs npm cloudflared tmux` — installed only if missing |
+| Packages | `openssh-server git curl wget tmux nodejs npm cloudflared uv python` — installed only if missing |
 | SSH | `sshd` on port 2222, key-only root, env propagated (`LD_LIBRARY_PATH`, PATH) so `nvidia-smi`/`claude` work in SSH shells |
-| Tunnel | Cloudflare quick tunnel → `ssh://127.0.0.1:2222`; hostname in `/content/tunnel_hostname.txt` |
-| Watchdog | `scripts/colab_watchdog.sh` — restarts sshd/tunnel if they die, records new hostname |
+| Tunnel | Cloudflare quick tunnel → `ssh://127.0.0.1:2222`; hostname in `/content/tunnel_hostname.txt` (reused if already alive) |
+| GPU/CUDA | Verifies `nvidia-smi` in a clean SSH-login shell, reports driver CUDA version and base-env `torch.cuda.is_available()` (best-effort; torch lives in per-model `.venvs`) |
 | Claude | Installed if missing; verified with `claude --version` |
-| Repo | Cloned or `git pull` at `/content/ai-creator-platform` |
-| Commands | `checkpoint`, `recover`, `dev` installed to `/usr/local/bin` |
+| Repo | Cloned or `fetch` + `pull` at `/content/ai-creator-platform`; identity set to `Dhananjay Nahata <nahatadhananjay33@gmail.com>` (override via `GIT_USER_NAME`/`GIT_USER_EMAIL`) |
+| Commands | `checkpoint`, `recover`, `dev` **baked into the notebook** and written to `/usr/local/bin` unconditionally (no repo dependency) |
+| Watchdog | `/usr/local/bin/colab_watchdog.sh` — restarts sshd/tunnel if they die, records new hostname; single instance via `flock` |
 
 Everything is idempotent — re-running the bootstrap never duplicates config or stacks
 processes.
