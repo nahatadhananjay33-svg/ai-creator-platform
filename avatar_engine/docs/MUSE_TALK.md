@@ -60,6 +60,35 @@ clones `TMElyralab/MuseTalk`, and a `prefetch_code` that:
 python -m avatar_engine.scripts.install_models --models musetalk
 ```
 
+## GPU smoke test (Phase A4.5)
+
+The canonical one-command GPU validation after any install — checks the
+GPU/CUDA runtime, that the adapter + weights are present, then runs the
+*smallest possible* inference (one demo portrait + ~1 s of audio → 25-frame
+mp4) through the real `MuseTalkAdapter` and confirms the output decodes.
+
+```bash
+python avatar_engine/scripts/smoke_musetalk.py
+```
+
+- **Expected runtime:** ~1.5–2 min on a Colab T4 (most of it is first-run model
+  loading; the 25-frame inference itself is a few seconds).
+- **Expected output:** a `PASSED` banner and a readable mp4 at
+  `avatar_engine/output/smoke/musetalk_smoke.mp4` (474×266, 25 fps, 25 frames,
+  1.0 s), with `device_actual: cuda`. **Exit code 0** on success.
+- **Common failures** (non-zero exit, actionable message):
+  - `FAIL: MuseTalk is not installed — missing repo entrypoint / weights` (exit
+    1) → run the installer above.
+  - `FAIL: a CUDA GPU is required but torch.cuda.is_available() is False` (exit
+    1) → no GPU / wrong runtime; select a GPU runtime.
+  - `FAIL: MuseTalk demo assets not found ...` (exit 2) → the cloned repo is
+    incomplete; re-run the installer.
+  - `FAIL: MuseTalk inference failed: ...` / `output video not decodable` (exit
+    3) → inference ran but produced no readable video.
+
+Flags: `--device {cuda,auto}` (default `cuda`), `--audio-seconds N` (default
+`1.0`), `--repo-dir`, `--output-dir`.
+
 ## Inference command (upstream v1.5 normal)
 
 ```

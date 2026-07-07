@@ -3,7 +3,10 @@
 > **MuseTalk (Phase A4.0).** `install_models --models musetalk` clones
 > `TMElyralab/MuseTalk`, installs the MMLab stack via `mim`, and downloads
 > ~10 GB of weights via the repo's `download_weights.sh` (5 HF repos + gdrive).
-> Verify with `python -m avatar_engine.scripts.validate_musetalk_weights`.
+> Verify weights with `python -m avatar_engine.scripts.validate_musetalk_weights`,
+> then validate the GPU end-to-end with
+> `python avatar_engine/scripts/smoke_musetalk.py` (smallest inference → mp4;
+> exit 0 on success — see [`MUSE_TALK.md`](MUSE_TALK.md#gpu-smoke-test-phase-a45)).
 > **Linux/CUDA only** (mmcv/mmpose) — runs on Colab, not native Windows. It is
 > audio-driven like SadTalker (portrait + audio). See
 > [`MUSE_TALK.md`](MUSE_TALK.md).
