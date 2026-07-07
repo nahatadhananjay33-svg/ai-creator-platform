@@ -67,6 +67,22 @@ def test_musetalk_torch_pinned_to_match_mmcv():
     assert "torch" not in args or "torch==2.0.1" in args
 
 
+def test_musetalk_declares_setuptools_for_pkg_resources():
+    # Regression (A4.3 fix): uv-created venvs ship no setuptools, so `pkg_resources`
+    # is absent. openmim/`mim install` and the MMLab stack (mmengine/mmcv/mmdet/mmpose)
+    # import pkg_resources at build+import time, and the adapter imports mmpose at
+    # runtime -> "ModuleNotFoundError: pkg_resources" unless setuptools is installed.
+    # The spec must declare setuptools in its pip_groups (traditional venv bundled it;
+    # uv does not).
+    spec = INSTALL_SPECS["musetalk"]
+    pkgs = [pkg for group in spec.pip_groups for pkg in group]
+    setuptools_pins = [p for p in pkgs if p.replace(" ", "").startswith("setuptools")]
+    assert setuptools_pins, "musetalk must install setuptools (uv venvs lack pkg_resources)"
+    # Pinned below 81, where setuptools deprecates/removes pkg_resources, keeping the
+    # MMLab-era (mmcv 2.0.1) stack importable.
+    assert setuptools_pins == ["setuptools<70"], setuptools_pins
+
+
 def test_prefetch_puts_venv_bin_on_path():
     # download_weights.sh calls huggingface-cli/gdown from the venv bin, which is
     # not on PATH in an unactivated uv venv — the prefetch must add it.

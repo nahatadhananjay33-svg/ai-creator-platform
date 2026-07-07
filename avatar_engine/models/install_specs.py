@@ -104,11 +104,19 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         # removed APIs that transformers 4.39.2 / diffusers 0.30.2 still call;
         # numpy to 1.23.5 (upstream pin) because torch 2.0.1 is ABI-incompatible
         # with numpy 2.x, and _PLATFORM_CORE's bare "numpy" resolves to 2.x.
+        # setuptools<70 (A4.3 fix): uv venvs ship NO setuptools, so `pkg_resources`
+        # is absent (traditional `python -m venv` bundles it — that's why this only
+        # surfaced after A1 moved to uv). openmim/`mim install` and the MMLab stack
+        # (mmengine/mmcv/mmdet/mmpose) import pkg_resources at build+import time, and
+        # the adapter imports mmpose at runtime -> "ModuleNotFoundError: pkg_resources".
+        # Declaring setuptools makes pkg_resources available; <70 matches the MMLab-era
+        # (2023/early-2024) ecosystem the rest of these pins target and stays clear of
+        # setuptools 81+, which deprecates/removes pkg_resources.
         pip_groups=(
             ("diffusers==0.30.2", "transformers==4.39.2", "accelerate==0.28.0",
              "huggingface_hub[cli]==0.30.2", "omegaconf", "soundfile",
              "librosa", "einops", "gdown", "requests", "openmim",
-             "numpy==1.23.5") + _PLATFORM_CORE,
+             "setuptools<70", "numpy==1.23.5") + _PLATFORM_CORE,
         ),
         # verify_imports runs BEFORE git clone + prefetch_code, so it must only
         # list packages the pip_groups install. mmpose/mmcv are installed by the
