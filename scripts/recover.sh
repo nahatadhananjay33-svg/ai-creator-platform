@@ -66,9 +66,11 @@ else
   bad "Claude" "not on PATH — re-run the bootstrap cell"
 fi
 
-# --- GPU (as a fresh SSH login shell would see it) ---------------------------
+# --- GPU / CUDA (as a fresh SSH login shell would see it) --------------------
 if env -i bash -lc 'nvidia-smi -L' >/dev/null 2>&1; then
   ok "GPU" "$(env -i bash -lc 'nvidia-smi -L' 2>/dev/null | head -1)"
+  CUDA="$(nvidia-smi 2>/dev/null | grep -oE 'CUDA Version: [0-9.]+' | head -1)"
+  note "CUDA" "${CUDA:-unknown (driver)}"
 else
   note "GPU" "none visible (CPU runtime, or env not propagated — re-run bootstrap)"
 fi
