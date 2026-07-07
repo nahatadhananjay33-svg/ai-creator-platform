@@ -22,9 +22,12 @@ reporting). No framework redesign.
 
 ## Required weights (authoritative — from upstream)
 
-From `download_weights.sh` and the README (not guessed). Weights live under
-`<repo>/models/`. Sizes are not published per-file upstream, so verification
-checks presence + a non-trivial-size guard.
+The file list traces to upstream's `download_weights.sh` + README (not guessed),
+but each weight now carries **structured download coordinates** (HF repo+file /
+Google-Drive id / URL) in `musetalk_weights.py`'s manifest, which is the single
+source of truth for the manifest-driven download (see Installation). Weights
+live under `<repo>/models/`. Sizes are not published per-file upstream, so
+verification checks presence + a non-trivial-size guard.
 
 | File (under `models/`) | Purpose | Source | v1.5 required |
 |---|---|---|:--:|
@@ -48,13 +51,28 @@ python -m avatar_engine.scripts.validate_musetalk_weights   # verified / missing
 
 The install spec (`install_specs.py [musetalk]`) reuses the existing installer:
 isolated venv (py3.10), GPU-aware PyTorch (`torch="auto"` → CUDA on a GPU host),
-clones `TMElyralab/MuseTalk`, and a `prefetch_code` that:
+`huggingface_hub==0.30.2` pinned (transformers 4.39.2 / diffusers 0.30.2 need
+it), clones `TMElyralab/MuseTalk`, and a `prefetch_code` that:
 
 1. bootstraps pip (uv venvs are pip-less),
-2. `mim install`s the MMLab stack (`mmengine`, `mmcv==2.0.1`, `mmdet==3.1.0`,
+2. pre-installs `chumpy==0.70` with `--no-build-isolation` (A4.4) — mmpose 1.1.0
+   hard-depends on it, and chumpy's sdist `setup.py` imports `pip` at build
+   time, which the PEP517 isolated build env doesn't provide,
+3. `mim install`s the MMLab stack (`mmengine`, `mmcv==2.0.1`, `mmdet==3.1.0`,
    `mmpose==1.1.0`) — MuseTalk's documented versions,
-3. runs the repo's own `download_weights.sh` (5 HF repos + Google Drive + a
-   PyTorch URL — resumable, skips valid files).
+4. downloads every weight **directly from the manifest** (A4.4) via the pinned
+   hub's `hf_hub_download` (default `huggingface.co`) + `gdown` (Google Drive) +
+   `urllib` (PyTorch URL) — idempotent (skips already-valid files) and
+   **hard-validated** (raises if any required weight is missing, so a partial
+   download can never be reported as success).
+
+> **Why not the repo's `download_weights.sh`?** (A4.4) It ran
+> `pip install -U "huggingface_hub[cli]"`, which upgraded hub past our pinned
+> `0.30.2` (renaming `huggingface-cli` → `hf`, so every download exited 1, and
+> breaking the transformers/diffusers runtime pin); it forced
+> `HF_ENDPOINT=hf-mirror.com`, which failed to serve the files; and it lacked
+> `set -e`, so it exited 0 after downloading nothing. Owning the download from
+> the manifest avoids all three.
 
 ```bash
 python -m avatar_engine.scripts.install_models --models musetalk
@@ -110,7 +128,22 @@ rate, and the framework's evaluation metrics.
 - **Linux/CUDA only.** The MMLab stack (mmcv/mmpose) compiles only on
   Linux + CUDA, so `supported_on_this_platform=False` on native Windows. Runs
   on Colab's T4; the dev host cannot execute it.
-- Weights ~10 GB across five sources; the download is delegated to the
-  upstream `download_weights.sh` for correctness.
+- Weights ~10 GB across five HF repos + Google Drive + a PyTorch URL; fetched
+  from the manifest (pinned `hf_hub_download` + `gdown` + `urllib`) and
+  hard-validated — not via the upstream `download_weights.sh` (see Installation).
 - Per-file SHA256 is not published upstream, so verification is presence +
   size-floor (truncation guard), not an exact hash.
+
+## Validation
+
+```bash
+python -m avatar_engine.scripts.validate_musetalk_weights   # per-weight status
+python avatar_engine/scripts/smoke_musetalk.py              # end-to-end GPU check
+```
+
+The permanent **GPU smoke test** (`smoke_musetalk.py`, A4.5) is the canonical
+one-command validation after any install: it checks GPU/CUDA + adapter/weights,
+runs the smallest inference (one demo portrait + ~1 s audio → 25-frame mp4)
+through the real `MuseTalkAdapter`, and confirms the output decodes. Exit 0 on
+success. See the [GPU smoke test](#gpu-smoke-test-phase-a45) section for runtime,
+output, and failure messages.

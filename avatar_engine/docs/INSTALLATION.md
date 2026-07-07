@@ -1,12 +1,16 @@
 # Avatar Model Installation
 
-> **MuseTalk (Phase A4.0).** `install_models --models musetalk` clones
-> `TMElyralab/MuseTalk`, installs the MMLab stack via `mim`, and downloads
-> ~10 GB of weights via the repo's `download_weights.sh` (5 HF repos + gdrive).
-> Verify weights with `python -m avatar_engine.scripts.validate_musetalk_weights`,
-> then validate the GPU end-to-end with
-> `python avatar_engine/scripts/smoke_musetalk.py` (smallest inference → mp4;
-> exit 0 on success — see [`MUSE_TALK.md`](MUSE_TALK.md#gpu-smoke-test-phase-a45)).
+> **MuseTalk (Phase A4.0, download hardened A4.4).** `install_models --models
+> musetalk` clones `TMElyralab/MuseTalk`, pre-installs `chumpy` +
+> `mim install`s the MMLab stack, and downloads ~10 GB of weights **from the
+> manifest** — pinned `huggingface_hub==0.30.2` `hf_hub_download` (default
+> `huggingface.co`) + `gdown` + `urllib`, idempotent and hard-validated (not the
+> repo's `download_weights.sh`, which corrupted the hub pin and forced a broken
+> mirror). Verify weights with
+> `python -m avatar_engine.scripts.validate_musetalk_weights`, then validate the
+> GPU end-to-end with `python avatar_engine/scripts/smoke_musetalk.py` (smallest
+> inference → mp4; exit 0 on success — see
+> [`MUSE_TALK.md`](MUSE_TALK.md#gpu-smoke-test-phase-a45)).
 > **Linux/CUDA only** (mmcv/mmpose) — runs on Colab, not native Windows. It is
 > audio-driven like SadTalker (portrait + audio). See
 > [`MUSE_TALK.md`](MUSE_TALK.md).
@@ -89,7 +93,7 @@ checkpoint downloads are separate steps listed in each spec's
 |---|---|---|
 | SadTalker | HF `vinthony/SadTalker` | `scripts/download_models.sh` |
 | LivePortrait | HF `KwaiVGI/LivePortrait` | InsightFace models auto-fetched — research-only, replace for production |
-| MuseTalk | HF `TMElyralab/MuseTalk` | `download_weights.sh`; also whisper-tiny, sd-vae |
+| MuseTalk | HF `TMElyralab/MuseTalk` | manifest-driven download (pinned `hf_hub_download` + gdown + urllib, hard-validated); also sd-vae, whisper-tiny, DWPose, BiSeNet |
 | LatentSync | HF `ByteDance/LatentSync-1.6` | `setup_env.sh` |
 | EchoMimic v2/v3 | HF `BadToBest/EchoMimicV2` / `V3` | plus base SD/Wan components per README |
 | Ditto | HF `digital-avatar/ditto-talkinghead` | TensorRT engine build per GPU |
