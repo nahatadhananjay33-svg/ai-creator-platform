@@ -61,7 +61,8 @@ def test_registry_covers_all_production_candidates() -> None:
 
 
 def test_planned_adapter_reports_unavailable_with_reason() -> None:
-    adapter = create_adapter("latentsync")
+    # `ditto` is still a planned placeholder (latentsync became real in A4.7).
+    adapter = create_adapter("ditto")
     assert not adapter.is_available()
     with pytest.raises(AdapterNotAvailableError, match="Phase A4"):
         adapter.load()

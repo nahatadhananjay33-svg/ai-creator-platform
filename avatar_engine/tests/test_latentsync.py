@@ -7,11 +7,14 @@ manifest-driven prefetch. Deterministic; no GPU, no network, no weights. Adapter
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from foundation.model_manager.installer import InstallationManager
+from avatar_engine.models import ADAPTER_CLASSES, create_adapter
 from avatar_engine.models import latentsync_weights as lw
 from avatar_engine.models.install_specs import INSTALL_SPECS
+from avatar_engine.models.latentsync import LatentSyncAdapter
 
 
 # --------------------------------------------------------------- install spec
@@ -115,3 +118,66 @@ def test_prefetch_downloads_from_manifest_and_validates(tmp_path):
     # Hard validation: a partial download must raise, never report false success.
     assert "required LatentSync weights missing after download" in code
     compile(code, "<prefetch>", "exec")            # must be valid Python
+
+
+# --------------------------------------------------------------- adapter
+def test_latentsync_is_real_adapter_not_planned():
+    a = create_adapter("latentsync")
+    assert isinstance(a, LatentSyncAdapter)
+    assert ADAPTER_CLASSES["latentsync"] is LatentSyncAdapter
+
+
+def test_required_inputs_are_video_and_audio():
+    # LatentSync is video-driven lip-sync (template video + audio), unlike
+    # MuseTalk's portrait + audio.
+    assert LatentSyncAdapter.REQUIRED_INPUTS == ("driving_video", "driving_audio")
+
+
+def _fake_repo(tmp_path, weights=True):
+    repo = tmp_path / "latentsync"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts" / "inference.py").write_text("# fake")
+    (repo / "configs" / "unet").mkdir(parents=True)
+    (repo / "configs" / "unet" / "stage2_512.yaml").write_text("# fake")
+    if weights:
+        for w in lw.LATENTSYNC_WEIGHTS:
+            p = lw.weights_root(repo) / w.relpath
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"\0" * 200_000)
+    return repo
+
+
+def test_required_paths_include_weights_config_and_entrypoint(tmp_path):
+    repo = _fake_repo(tmp_path)
+    a = LatentSyncAdapter(config={"repo_dir": repo})
+    req = {str(p) for p in a.required_paths()}
+    assert str(repo / "scripts" / "inference.py") in req
+    assert str(repo / "configs" / "unet" / "stage2_512.yaml") in req
+    assert str(lw.weights_root(repo) / "latentsync_unet.pt") in req
+
+
+def test_adapter_names_missing_weight(tmp_path):
+    repo = _fake_repo(tmp_path, weights=False)
+    a = LatentSyncAdapter(config={"repo_dir": repo, "venv_python": sys.executable})
+    diag = a.diagnostics()
+    assert diag.available is False
+    assert any("latentsync_unet.pt" in ps["path"]
+               for ps in diag.required_paths if not ps["exists"])
+
+
+def test_inference_command_is_upstream_stage2(tmp_path):
+    a = LatentSyncAdapter(config={"repo_dir": tmp_path})
+    cmd = a.inference_command(tmp_path / "v.mp4", tmp_path / "a.wav", tmp_path / "out.mp4")
+    assert cmd[1:3] == ["-m", "scripts.inference"]
+    assert "configs/unet/stage2_512.yaml" in cmd
+    assert "checkpoints/latentsync_unet.pt" in cmd
+    assert "--enable_deepcache" in cmd
+    assert cmd[cmd.index("--video_path") + 1] == str(tmp_path / "v.mp4")
+    assert cmd[cmd.index("--video_out_path") + 1] == str(tmp_path / "out.mp4")
+
+
+def test_inference_steps_configurable(tmp_path):
+    # The smoke test lowers steps for speed; the adapter must honor config.
+    a = LatentSyncAdapter(config={"repo_dir": tmp_path, "inference_steps": 4})
+    cmd = a.inference_command(tmp_path / "v.mp4", tmp_path / "a.wav", tmp_path / "o.mp4")
+    assert cmd[cmd.index("--inference_steps") + 1] == "4"

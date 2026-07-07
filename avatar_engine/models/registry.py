@@ -17,6 +17,7 @@ from foundation.model_manager import Device
 from avatar_engine.models.base import BaseAvatarAdapter
 from avatar_engine.models.diagnostics import AdapterDiagnostic
 from avatar_engine.models.interface import GenerationRequest, GenerationResult
+from avatar_engine.models.latentsync import LatentSyncAdapter
 from avatar_engine.models.liveportrait import LivePortraitAdapter
 from avatar_engine.models.mock import MockAvatarAdapter
 from avatar_engine.models.musetalk import MuseTalkAdapter
@@ -76,6 +77,7 @@ ADAPTER_CLASSES: dict[str, Type[BaseAvatarAdapter]] = {
     "sadtalker": SadTalkerAdapter,       # A3.5
     "liveportrait": LivePortraitAdapter,  # A3.9
     "musetalk": MuseTalkAdapter,          # A4.0
+    "latentsync": LatentSyncAdapter,     # A4.7
 }
 
 
