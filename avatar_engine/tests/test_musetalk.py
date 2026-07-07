@@ -90,6 +90,28 @@ def test_prefetch_puts_venv_bin_on_path():
     assert "bindir" in code and "PATH" in code and "env=env" in code
 
 
+def test_prefetch_preinstalls_chumpy_no_build_isolation():
+    # Regression (A4.4 fix): mmpose 1.1.0 hard-depends on chumpy 0.70, whose sdist
+    # has no wheel and whose setup.py does `from pip._internal.req import
+    # parse_requirements` at build time. Under PEP517 build isolation the build env
+    # has only setuptools+wheel (never pip), so `mim install mmpose==1.1.0` dies with
+    # "ModuleNotFoundError: No module named 'pip'" (masked by pip 26 as
+    # "checkpoint prefetch failed: ... No available output"). The prefetch must
+    # pre-install chumpy with --no-build-isolation (so its setup.py sees the venv's
+    # pip) BEFORE the mim loop, so mmpose finds it satisfied and skips the build.
+    code = INSTALL_SPECS["musetalk"].prefetch_code
+    assert "chumpy==0.70" in code
+    assert "--no-build-isolation" in code
+    # --no-build-isolation runs setup.py against the venv's build tools; uv venvs
+    # ship no `wheel`, so the prefetch must install it too (setuptools<70 is already
+    # in the pip_groups).
+    assert "'wheel'" in code
+    # chumpy must be installed before `mim install mmpose==1.1.0` (otherwise mim
+    # triggers the broken isolated build first).
+    assert code.index("chumpy==0.70") < code.index("for pkg in"), \
+        "chumpy pre-install must precede the mim install loop"
+
+
 # --------------------------------------------------------------- weights
 def test_manifest_matches_upstream_layout():
     rel = {w.relpath for w in mw.MUSETALK_WEIGHTS}

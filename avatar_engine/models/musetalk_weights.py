@@ -151,6 +151,20 @@ def build_prefetch_code(repo_dir: Path) -> str:
         "    import ensurepip; ensurepip.bootstrap()\n"
         # MMLab stack (MuseTalk's documented versions) via openmim.
         "subprocess.run([sys.executable, '-m', 'pip', 'install', '-U', 'openmim'], check=True, env=env)\n"
+        # mmpose 1.1.0 hard-depends on chumpy 0.70, whose sdist has no wheel and
+        # whose setup.py does `from pip._internal.req import parse_requirements`
+        # at build time. Under PEP517 build isolation the build env carries only
+        # setuptools+wheel (never pip), so the import raises and `mim install
+        # mmpose` dies with "ModuleNotFoundError: No module named 'pip'" — masked
+        # by pip 26 as "checkpoint prefetch failed: ... No available output".
+        # Pre-install chumpy with --no-build-isolation so its setup.py sees the
+        # venv's pip; that path also needs `wheel` in the venv (uv venvs omit it,
+        # and setuptools<70 is already pinned in the pip_groups). Once chumpy is
+        # present, `mim install mmpose==1.1.0` finds it satisfied and skips the
+        # broken build. (A4.4)
+        "subprocess.run([sys.executable, '-m', 'pip', 'install', 'wheel'], check=True, env=env)\n"
+        "subprocess.run([sys.executable, '-m', 'pip', 'install', 'chumpy==0.70',\n"
+        "                '--no-build-isolation'], check=True, env=env)\n"
         "mim = os.path.join(bindir, 'mim')\n"
         "for pkg in ('mmengine', 'mmcv==2.0.1', 'mmdet==3.1.0', 'mmpose==1.1.0'):\n"
         "    subprocess.run([mim, 'install', pkg], check=True, env=env)\n"
