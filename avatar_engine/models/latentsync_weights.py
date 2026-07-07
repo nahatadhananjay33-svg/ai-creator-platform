@@ -140,16 +140,16 @@ def build_prefetch_code(repo_dir: Path) -> str:
     with the pinned hub's ``hf_hub_download`` (default huggingface.co) and
     pre-warm the SD VAE with ``snapshot_download`` — idempotent (skips
     already-valid files) and hard-validated (raises if any required checkpoint
-    is missing, so a partial download can never be reported as success). uv
-    venvs ship no pip, so pip is bootstrapped first.
+    is missing, so a partial download can never be reported as success). No pip
+    is needed here (huggingface_hub is installed by the pip_groups), so — unlike
+    MuseTalk's mim-based prefetch — we do not touch pip/ensurepip (uv venvs ship
+    neither).
     """
     repo = Path(repo_dir).as_posix()
     specs_literal = repr(_download_specs())
     return (
-        "import os, sys, importlib.util, pathlib\n"
+        "import pathlib\n"
         f"repo = pathlib.Path(r'{repo}')\n"
-        "if importlib.util.find_spec('pip') is None:\n"
-        "    import ensurepip; ensurepip.bootstrap()\n"
         "from huggingface_hub import hf_hub_download, snapshot_download\n"
         "ckpt = repo / 'checkpoints'\n"
         "ckpt.mkdir(parents=True, exist_ok=True)\n"

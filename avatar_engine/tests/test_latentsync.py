@@ -105,7 +105,9 @@ def test_required_valid_true_when_all_present(tmp_path):
 # --------------------------------------------------------------- prefetch
 def test_prefetch_downloads_from_manifest_and_validates(tmp_path):
     code = lw.build_prefetch_code(tmp_path)
-    assert "ensurepip" in code                     # uv venvs are pip-less
+    # No pip/ensurepip: the prefetch only imports huggingface_hub (installed by
+    # pip_groups) — uv venvs ship neither pip nor ensurepip (M2 fix).
+    assert "ensurepip" not in code and "import pip" not in code
     assert "hf_hub_download" in code and "snapshot_download" in code
     for w in lw.LATENTSYNC_WEIGHTS:
         assert repr(w.relpath) in code
