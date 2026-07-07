@@ -18,6 +18,7 @@ import sys
 from foundation.model_manager.installer import REPOS_DIR, InstallSpec
 from avatar_engine.models.liveportrait_weights import build_prefetch_code as build_liveportrait_prefetch
 from avatar_engine.models.musetalk_weights import build_prefetch_code as build_musetalk_prefetch
+from avatar_engine.models.latentsync_weights import build_prefetch_code as build_latentsync_prefetch
 
 _IS_WINDOWS = sys.platform == "win32"
 _PLATFORM_CORE = ("pyyaml", "psutil", "numpy", "opencv-python", "imageio-ffmpeg")
@@ -144,16 +145,43 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
     ),
     "latentsync": InstallSpec(
         model_id="latentsync",
+        python_version="3.10",
+        # Pins from LatentSync's requirements.txt (A4.7). torch 2.5.1/cu121 — the
+        # T4 is sm_75, supported by cu121 wheels (runs fp32 there: fp16 needs
+        # compute capability > 7). huggingface_hub 0.30.2 is upstream's own pin
+        # (transformers 4.48 / diffusers 0.32 API). setuptools<81 because librosa
+        # 0.10.1 imports pkg_resources and uv venvs ship no setuptools (the
+        # SadTalker/MuseTalk lesson). GPU-aware (A3.8): cu121 index on a GPU host.
+        torch="auto",
+        torch_packages=("torch==2.5.1", "torchvision==0.20.1"),
+        torch_cuda_index="https://download.pytorch.org/whl/cu121",
         pip_groups=(
-            ("diffusers", "transformers", "accelerate", "decord", "einops",
-             "omegaconf", "soundfile", "librosa") + _PLATFORM_CORE,
+            ("diffusers==0.32.2", "transformers==4.48.0", "accelerate==0.26.1",
+             "decord==0.6.0", "einops==0.7.0", "omegaconf==2.3.0",
+             "opencv-python==4.9.0.80", "mediapipe==0.10.11",
+             "python_speech_features==0.6", "librosa==0.10.1", "scenedetect==0.6.1",
+             "ffmpeg-python==0.2.0", "imageio==2.31.1", "imageio-ffmpeg==0.5.1",
+             "lpips==0.1.4", "face-alignment==1.4.1", "huggingface_hub==0.30.2",
+             "numpy==1.26.4", "kornia==0.8.0", "insightface==0.7.3",
+             "onnxruntime-gpu==1.21.0", "DeepCache==0.1.1",
+             # gradio (upstream) is only for the web app; the scripts.inference
+             # path doesn't import it, so it's omitted to slim the install.
+             "setuptools<81", "pyyaml", "psutil"),
         ),
+        # verify_imports runs BEFORE git clone + prefetch, so it must only list
+        # packages the pip_groups install (diffusers, cv2 via opencv-python). The
+        # weights are downloaded by the prefetch and verified at runtime.
         verify_imports=("diffusers", "cv2"),
-        approx_download_gb=12.0,
-        torch="cuda",
+        git_repo="https://github.com/bytedance/LatentSync.git",
+        # Downloads latentsync_unet.pt + whisper/tiny.pt from HF
+        # ByteDance/LatentSync-1.6 and pre-warms the SD VAE (A4.7 manifest-driven;
+        # not the repo's huggingface-cli/conda setup_env.sh).
+        prefetch_code=build_latentsync_prefetch(REPOS_DIR / "latentsync"),
+        approx_download_gb=6.0,
         supported_on_this_platform=not _IS_WINDOWS,
-        platform_notes="clone bytedance/LatentSync; setup_env.sh pulls checkpoints from HF "
-        "ByteDance/LatentSync-1.6; needs ffmpeg on PATH",
+        platform_notes="clone bytedance/LatentSync; weights (latentsync_unet.pt + "
+        "whisper/tiny.pt) fetched from HF ByteDance/LatentSync-1.6 via the manifest; "
+        "SD VAE + insightface/face-alignment models download at runtime; needs ffmpeg.",
     ),
     "echomimic-v3": InstallSpec(
         model_id="echomimic-v3",
