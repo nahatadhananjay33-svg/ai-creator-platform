@@ -47,6 +47,7 @@ archive/
 foundation/cache/data/
 voice_engine/output/
 avatar_engine/output/
+reel_engine/orchestrator/output/
 voice_engine/voices/profiles/
 **/output/runs/
 **/output/installs/

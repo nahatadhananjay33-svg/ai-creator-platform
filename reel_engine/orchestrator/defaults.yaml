@@ -1,0 +1,41 @@
+# End-to-end AI Creator Platform pipeline defaults (Phase C3 walking skeleton).
+#
+# Model selection is configuration, not code (platform convention): switch the
+# voice/avatar model, resolution, fps, renderer, or export set here — or via
+# AICP__section__key env overrides — with no code change. C3 proves the
+# architecture (script -> voice -> avatar -> Timeline -> render -> MP4); it does
+# NOT add captions, planning, b-roll, music, branding, or transitions (C4+).
+
+voice:
+  model: kokoro           # default TTS; "chatterbox" (quality/cloning) or "mock"
+  language: en            # BCP-47-ish language code understood by the Voice Engine
+  speed: 1.0              # speaking-rate multiplier
+  device: auto            # "auto" | "cpu" | "cuda"
+
+avatar:
+  model: musetalk         # default talking-head; "latentsync" (video-driven) or "mock"
+  device: auto            # "auto" | "cpu" | "cuda"
+
+# Master render + codec settings (reuses the Reels Engine RenderConfig schema).
+render:
+  renderer: ffmpeg        # "ffmpeg" (real MP4) | "mock" (hermetic raw-AVI proxy)
+  width: 1080             # master resolution (9:16 portrait by default)
+  height: 1920
+  fps: 30
+  codec: libx264
+  pix_fmt: yuv420p
+  bitrate: "6M"
+  audio_codec: aac
+  audio_sample_rate: 44100
+
+export:
+  # Platform/aspect profiles emitted from the master (see exporters/profiles.py).
+  # One reel by default; add square_1x1 / landscape_16x9 to fan out.
+  profiles: [reel_9x16]
+
+# Reference the avatar drives from: a face image (MuseTalk/mock) or a driving
+# video (LatentSync). null -> the packaged demo face asset.
+reference_face: null
+
+# Where finished reels land. null -> reel_engine/orchestrator/output.
+output_dir: null

@@ -157,6 +157,19 @@ class FFmpegRenderer(TimelineRenderer):
         return ExportOutput(profile=profile_name, path=out, width=prof.width,
                             height=prof.height, aspect=prof.aspect)
 
+    def export_master(self, master: Path, profile_names) -> tuple:
+        """Fit an already-rendered master into each platform/aspect profile.
+
+        Public so callers (e.g. the end-to-end pipeline) can render a master once
+        and time the cheap scale+pad export pass separately from the render pass.
+        ``render`` uses this internally, so the two paths stay identical."""
+        master = Path(master)
+        return tuple(
+            self._export(master, name,
+                         master.with_name(f"{master.stem}__{name}{master.suffix}"))
+            for name in profile_names
+        )
+
     # ----------------------------------------------------------------- render
     def render(self, request: RenderRequest) -> RenderResult:
         if self._ffmpeg is None:
@@ -175,10 +188,7 @@ class FFmpegRenderer(TimelineRenderer):
                 scene_files.append(sf)
             self._concat(scene_files, out, work)
 
-            exports = []
-            for name in request.export_profiles:
-                ex_path = out.with_name(f"{out.stem}__{name}{out.suffix}")
-                exports.append(self._export(out, name, ex_path))
+            exports = list(self.export_master(out, request.export_profiles))
 
         # cleanup intermediates (keep master + exports)
         for sf in scene_files:
