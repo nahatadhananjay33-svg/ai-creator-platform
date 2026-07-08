@@ -23,23 +23,27 @@ flock -n 9 || { echo "watchdog: another instance is already running"; exit 0; }
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >>"$WLOG"; }
 
+# Start a tunnel and wait until it is actually EDGE-REGISTERED, not just named.
+# A named-but-unregistered tunnel returns "websocket: bad handshake" to clients.
 start_tunnel() {
   pkill -f 'cloudflared tunnel' 2>/dev/null || true
-  sleep 1
+  sleep 2
   : >"$LOG"
   nohup cloudflared tunnel --no-autoupdate --url "ssh://127.0.0.1:${SSH_PORT}" \
         --logfile "$LOG" --loglevel info >/dev/null 2>&1 &
-  local h=""
-  for _ in $(seq 1 45); do
-    h="$(grep -oE '[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1)"
-    if [ -n "$h" ]; then
+  local h="" reg=""
+  for _ in $(seq 1 60); do
+    [ -z "$h" ] && h="$(grep -oE '[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1)"
+    grep -q 'Registered tunnel connection' "$LOG" 2>/dev/null && reg=1
+    if [ -n "$h" ] && [ -n "$reg" ]; then
       echo "$h" >"$HOSTFILE"
-      log "tunnel up: $h"
+      log "tunnel up + registered: $h"
       return 0
     fi
     sleep 1
   done
-  log "tunnel restart failed to report a hostname within 45s"
+  [ -n "$h" ] && echo "$h" >"$HOSTFILE"
+  log "tunnel restart incomplete: hostname=${h:-none} registered=${reg:-no}"
   return 1
 }
 
@@ -50,13 +54,15 @@ while true; do
     log "sshd down -> restarting"
     /usr/sbin/sshd 2>>"$WLOG" || log "sshd restart returned non-zero"
   fi
-  # cloudflared
+  # cloudflared — restart if the process is gone, OR if it is alive but never
+  # registered with the edge (a zombie that would serve "bad handshake").
   if ! pgrep -f 'cloudflared tunnel' >/dev/null 2>&1; then
     old="$(cat "$HOSTFILE" 2>/dev/null || echo none)"
     log "tunnel down (was ${old}) -> restarting"
-    if start_tunnel; then
-      log "NEW HOSTNAME $(cat "$HOSTFILE") — update ~/.ssh/config on Windows and reconnect"
-    fi
+    start_tunnel && log "NEW HOSTNAME $(cat "$HOSTFILE") — update ~/.ssh/config on Windows and reconnect"
+  elif ! grep -q 'Registered tunnel connection' "$LOG" 2>/dev/null; then
+    log "cloudflared alive but never edge-registered (zombie) -> restarting"
+    start_tunnel && log "NEW HOSTNAME $(cat "$HOSTFILE") — update ~/.ssh/config on Windows and reconnect"
   fi
   sleep 20
 done
