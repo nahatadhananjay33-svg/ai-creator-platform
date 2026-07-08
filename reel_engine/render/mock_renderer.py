@@ -25,6 +25,12 @@ from reel_engine.interfaces.types import (
     RenderResult,
     Scene,
 )
+from reel_engine.render.assets import (
+    asset_anim_state,
+    asset_mock_color,
+    resolve_assets,
+    resolve_placement,
+)
 from reel_engine.render.base import TimelineRenderer, proxy_dimensions, scene_frame_count
 from reel_engine.render.branding import anchor_frac, resolve_branding
 from reel_engine.render.captions import CaptionDraw, caption_alpha, lower_caption_tracks
@@ -199,6 +205,64 @@ class MockRenderer(TimelineRenderer):
             out.append(painted)
         return out
 
+    # ------------------------------------------------------------ assets (C6)
+    @staticmethod
+    def _asset_box(clip, w: int, h: int, t: float) -> tuple:
+        """(x0, x1, y0, y1, alpha) for an asset clip at time ``t`` (proxy px).
+
+        Placement rect (from the clip's layout) is scaled about its centre and
+        offset per the animation state — the same geometry the FFmpeg overlay
+        lowers to, so tests can assert layout/animation deterministically."""
+        p = resolve_placement(clip)
+        alpha, ox, oy, sc = asset_anim_state(clip, t)
+        bw, bh = p.w * w * sc, p.h * h * sc
+        cx = (p.x + p.w / 2.0) * w + ox * w
+        cy = (p.y + p.h / 2.0) * h + oy * h
+        x0 = int(round(cx - bw / 2.0))
+        y0 = int(round(cy - bh / 2.0))
+        x1 = int(round(cx + bw / 2.0))
+        y1 = int(round(cy + bh / 2.0))
+        return (max(0, x0), min(w, x1), max(0, y0), min(h, y1),
+                max(0.0, min(1.0, alpha * clip.opacity)))
+
+    def _overlay_assets(self, frames: list, w: int, h: int, fps: int, timeline) -> list:
+        """Return a frame list with visual-asset (B-roll) boxes overlaid."""
+        clips = resolve_assets(timeline)
+        if not clips:
+            return frames
+        out: list = []
+        cache: dict = {}
+        colors = {c.clip_id: rgb_to_bgr_bytes(asset_mock_color(c.clip_id)) for c in clips}
+        for idx, base in enumerate(frames):
+            t = idx / fps
+            active = [c for c in clips if c.start_s - 1e-9 <= t <= c.end_s + 1e-9]
+            if not active:
+                out.append(base)
+                continue
+            boxes = [(c.clip_id, *self._asset_box(c, w, h, t)) for c in active]  # z-sorted
+            sig = (id(base), tuple((cid, x0, x1, y0, y1, round(a, 3))
+                                   for cid, x0, x1, y0, y1, a in boxes))
+            painted = cache.get(sig)
+            if painted is None:
+                buf = bytearray(base)
+                for cid, x0, x1, y0, y1, a in boxes:
+                    if a <= 0.01 or x1 <= x0 or y1 <= y0:
+                        continue
+                    bgr = colors[cid]
+                    for y in range(y0, y1):
+                        row = y * w * 3
+                        for x in range(x0, x1):
+                            o = row + x * 3
+                            if a >= 0.999:
+                                buf[o:o + 3] = bgr
+                            else:
+                                for k in range(3):
+                                    buf[o + k] = int(round(buf[o + k] * (1 - a) + bgr[k] * a))
+                painted = bytes(buf)
+                cache[sig] = painted
+            out.append(painted)
+        return out
+
     # ---------------------------------------------------------- branding (C5)
     def _branding_box(self, el, w: int, h: int, safe_h: float, safe_v: float) -> tuple:
         """Deterministic (x0, x1, y0, y1) box for a branding element.
@@ -273,9 +337,10 @@ class MockRenderer(TimelineRenderer):
             base_frames: list[bytes] = []
             for frame, count in per_scene:
                 base_frames.extend([frame] * count)
-            # Captions then branding are native Timeline tracks: overlay them in
-            # absolute reel time (branding on top; each a no-op when absent).
-            frames = self._overlay_captions(base_frames, w, h, fps, tl)
+            # Native Timeline tracks composite bottom-to-top: B-roll assets,
+            # then captions, then branding (each a no-op when absent).
+            frames = self._overlay_assets(base_frames, w, h, fps, tl)
+            frames = self._overlay_captions(frames, w, h, fps, tl)
             frames = self._overlay_branding(frames, w, h, fps, tl)
             write_raw_avi(out, VideoFrames(frames=frames, width=w, height=h, fps=float(fps)))
 
@@ -293,7 +358,8 @@ class MockRenderer(TimelineRenderer):
                         scaled_cache[i] = self._scale_pad(frame, w, h, name)
                     sframe, ew, eh, prof = scaled_cache[i]
                     ex_frames.extend([sframe] * count)
-                # Exports inherit captions + branding too (FFmpeg parity).
+                # Exports inherit assets + captions + branding too (FFmpeg parity).
+                ex_frames = self._overlay_assets(ex_frames, ew, eh, fps, tl)
                 ex_frames = self._overlay_captions(ex_frames, ew, eh, fps, tl)
                 ex_frames = self._overlay_branding(ex_frames, ew, eh, fps, tl)
                 ex_path = out.with_name(f"{out.stem}__{name}{out.suffix}")

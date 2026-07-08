@@ -22,6 +22,7 @@ from foundation.shared_utils import Stopwatch
 from foundation.shared_utils.ffmpeg import ensure_ffmpeg_on_path
 from reel_engine.exporters.profiles import get_profile
 from reel_engine.interfaces.types import ExportOutput, RenderRequest, RenderResult, Scene
+from reel_engine.render.assets import resolve_assets, resolve_placement
 from reel_engine.render.base import TimelineRenderer
 from reel_engine.render.branding import resolve_branding
 from reel_engine.render.captions import (
@@ -237,6 +238,100 @@ class FFmpegRenderer(TimelineRenderer):
         tmp.replace(master)
         return True
 
+    # ------------------------------------------------------------ assets (C6)
+    def _asset_clip_graph(self, clip, meta, in_lbl: str, out_lbl: str,
+                          cur: str) -> tuple:
+        """Return (prep_chain, overlay_step) for one asset clip.
+
+        ``prep_chain`` crops/scales/fits the asset stream, applies opacity and
+        fade animation; ``overlay_step`` composites it onto ``cur`` at the
+        placement rectangle with an optional slide, gated to the clip window."""
+        p = resolve_placement(clip)
+        W, H = meta.width, meta.height
+        dx, dy = int(p.x * W), int(p.y * H)
+        dw, dh = max(2, int(p.w * W)), max(2, int(p.h * H))
+        s, e = clip.start_s, clip.end_s
+
+        chain: list[str] = []
+        c = clip.crop
+        if not c.is_full:
+            chain.append(f"crop=iw*{c.w:.4f}:ih*{c.h:.4f}:iw*{c.x:.4f}:ih*{c.y:.4f}")
+        if p.fit == "cover":
+            chain.append(f"scale={dw}:{dh}:force_original_aspect_ratio=increase,"
+                         f"crop={dw}:{dh}")
+        elif p.fit == "stretch":
+            chain.append(f"scale={dw}:{dh}")
+        else:                                    # contain
+            chain.append(f"scale={dw}:{dh}:force_original_aspect_ratio=decrease")
+        chain.append("format=rgba")
+        if clip.opacity < 1.0:
+            chain.append(f"colorchannelmixer=aa={clip.opacity:.3f}")
+        if clip.is_video:                        # shift the clip into reel time
+            chain.append(f"setpts=PTS-STARTPTS+{s:.3f}/TB")
+        ai, ao = clip.animation_in, clip.animation_out
+        # fade covers fade_in/out, cross_dissolve, and approximates scale (v1).
+        if ai.kind in ("fade_in", "cross_dissolve", "scale") and ai.duration_s > 0:
+            chain.append(f"fade=t=in:st={s:.3f}:d={ai.duration_s:.3f}:alpha=1")
+        if clip.transition.kind == "cross_dissolve" and ai.kind == "none" \
+                and clip.transition.duration_s > 0:
+            chain.append(f"fade=t=in:st={s:.3f}:d={clip.transition.duration_s:.3f}:alpha=1")
+        if ao.kind != "none" and ao.duration_s > 0:
+            chain.append(f"fade=t=out:st={e - ao.duration_s:.3f}:d={ao.duration_s:.3f}:alpha=1")
+        prep = f"[{in_lbl}]{','.join(chain)}[{out_lbl}]"
+
+        # overlay position (+ enter slide via a t-dependent x expression)
+        if p.fit == "contain":
+            bx, by = f"{dx}+({dw}-w)/2", f"{dy}+({dh}-h)/2"
+        else:
+            bx, by = str(dx), str(dy)
+        if ai.kind == "slide_left" and ai.duration_s > 0:
+            bx = f"({bx})+(1-min(1,max(0,(t-{s:.3f})/{ai.duration_s:.3f})))*{W}"
+        elif ai.kind == "slide_right" and ai.duration_s > 0:
+            bx = f"({bx})-(1-min(1,max(0,(t-{s:.3f})/{ai.duration_s:.3f})))*{W}"
+        # x/y are quoted so commas inside min()/max() slide expressions don't
+        # terminate the filter (the filtergraph parser splits options on ',').
+        step = (f"[{cur}][{out_lbl}]overlay=x='{bx}':y='{by}':"
+                f"enable='between(t,{s:.3f},{e:.3f})'[v{out_lbl}]")
+        return prep, step
+
+    def _apply_assets(self, master: Path, tl) -> bool:
+        """Composite every visual-asset clip onto ``master`` (one filter_complex).
+
+        Images are looped to the reel length; videos are looped + shifted into
+        reel time; each is cropped/scaled/fitted to its placement, faded, and
+        overlaid in z-order. No-op when the timeline has no asset clips."""
+        clips = resolve_assets(tl)
+        if not clips:
+            return False
+        meta = tl.meta
+        reel_dur = tl.duration_s
+        inputs: list[str] = ["-i", str(master)]
+        prep: list[str] = []
+        steps: list[str] = []
+        cur = "0:v"
+        k = 1
+        for clip in clips:
+            uri = str(clip.source.uri)
+            if clip.is_video:
+                inputs += ["-stream_loop", "-1", "-i", uri]
+            else:
+                inputs += ["-loop", "1", "-t", f"{reel_dur:.3f}", "-i", uri]
+            prep_str, step = self._asset_clip_graph(clip, meta, f"{k}:v", f"a{k}", cur)
+            prep.append(prep_str)
+            steps.append(step)
+            cur = f"va{k}"
+            k += 1
+
+        filter_complex = ";".join(prep + steps)
+        r = self.config.render
+        tmp = master.with_name(f"{master.stem}__assets{master.suffix}")
+        self._run([*inputs, "-filter_complex", filter_complex,
+                   "-map", f"[{cur}]", "-map", "0:a?",
+                   "-c:v", r.codec, "-pix_fmt", r.pix_fmt, "-b:v", r.bitrate,
+                   "-c:a", "copy", "-t", f"{reel_dur:.3f}", str(tmp)])
+        tmp.replace(master)
+        return True
+
     # ---------------------------------------------------------- branding (C5)
     @staticmethod
     def _enable(el) -> str:
@@ -421,8 +516,10 @@ class FFmpegRenderer(TimelineRenderer):
                 self._render_scene(scene, tl.meta, sf)
                 scene_files.append(sf)
             self._concat(scene_files, out, work)
-            # Captions then branding are native Timeline tracks: composite them
-            # into the master BEFORE export so every aspect profile inherits them.
+            # Native Timeline tracks composite bottom-to-top: B-roll assets,
+            # then captions, then branding — into the master BEFORE export so
+            # every aspect profile inherits them.
+            assets_drawn = self._apply_assets(out, tl)
             captions_drawn = self._apply_captions(out, tl)
             branding_drawn = self._apply_branding(out, tl)
 
@@ -444,6 +541,7 @@ class FFmpegRenderer(TimelineRenderer):
             render_time_s=round(sw.elapsed_s, 4), timeline_hash=timeline_content_hash(tl),
             exports=tuple(exports),
             metadata={"has_text": self._font is not None, "font": self._font,
-                      "captions": captions_drawn, "branding": branding_drawn,
+                      "assets": assets_drawn, "captions": captions_drawn,
+                      "branding": branding_drawn,
                       "base_resolution": [tl.meta.width, tl.meta.height]},
         )
