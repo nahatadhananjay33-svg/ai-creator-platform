@@ -23,6 +23,7 @@ from foundation.shared_utils.ffmpeg import ensure_ffmpeg_on_path
 from reel_engine.exporters.profiles import get_profile
 from reel_engine.interfaces.types import ExportOutput, RenderRequest, RenderResult, Scene
 from reel_engine.render.base import TimelineRenderer
+from reel_engine.render.branding import resolve_branding
 from reel_engine.render.captions import (
     LINE_HEIGHT_FACTOR,
     CaptionDraw,
@@ -236,6 +237,144 @@ class FFmpegRenderer(TimelineRenderer):
         tmp.replace(master)
         return True
 
+    # ---------------------------------------------------------- branding (C5)
+    @staticmethod
+    def _enable(el) -> str:
+        return f":enable='between(t,{el.start_s:.3f},{el.end_s:.3f})'"
+
+    @staticmethod
+    def _overlay_xy(position: str, sh: float, sv: float) -> tuple:
+        """(x, y) expressions for the ``overlay`` filter (main W/H, overlay w/h)."""
+        if "left" in position:
+            x = f"W*{sh:.4f}"
+        elif "right" in position:
+            x = f"W-w-W*{sh:.4f}"
+        else:
+            x = "(W-w)/2"
+        if "top" in position:
+            y = f"H*{sv:.4f}"
+        elif "bottom" in position:
+            y = f"H-h-H*{sv:.4f}"
+        else:
+            y = "(H-h)/2"
+        return x, y
+
+    def _branding_draw(self, el, meta, sh: float, sv: float) -> str:
+        """A drawbox/drawtext chain for one non-image branding element.
+
+        Returns a comma-joined filter (or ``null`` passthrough). Boxes/cards
+        always draw so branding is visible even without a font; text layers are
+        added only when a font is available."""
+        font = self._font
+        fill = rgb_to_hex(el.fill_color)
+        txt = rgb_to_hex(el.text_color)
+        en = self._enable(el)
+        H, Wd = meta.height, meta.width
+        parts: list[str] = []
+
+        def dt(text, fontsize, x, y, color, alpha=1.0):
+            return (f"drawtext=fontfile='{font}':text='{_escape_drawtext(text)}':"
+                    f"fontcolor={color}@{alpha:.2f}:fontsize={int(fontsize)}:"
+                    f"x={x}:y={y}{en}")
+
+        if el.kind in ("intro", "outro"):
+            parts.append(f"drawbox=x=0:y=0:w=iw:h=ih:color={fill}@1.0:t=fill{en}")
+            if font:
+                title_fs, sub_fs, hd_fs = H * 0.045, H * 0.028, H * 0.024
+                parts.append(dt(el.text or "", title_fs, "(w-text_w)/2", "h*0.40", txt))
+                if el.subtitle:
+                    parts.append(dt(el.subtitle, sub_fs, "(w-text_w)/2",
+                                    f"h*0.40+{title_fs * 1.4:.0f}", txt))
+                for i, line in enumerate(el.lines):
+                    parts.append(dt(line, hd_fs, "(w-text_w)/2",
+                                    f"h*0.62+{i * hd_fs * 1.5:.0f}", txt))
+        elif el.kind == "lower_third":
+            parts.append(f"drawbox=x=0:y=ih*0.72:w=iw:h=ih*0.15:"
+                         f"color={fill}@{el.opacity:.2f}:t=fill{en}")
+            if font:
+                parts.append(dt(el.text or "", H * 0.032, f"w*{sh + 0.02:.4f}", "h*0.735", txt))
+                if el.subtitle:
+                    parts.append(dt(el.subtitle, H * 0.024, f"w*{sh + 0.02:.4f}", "h*0.80", txt))
+        elif el.kind == "logo":                 # text badge (no image source)
+            bw = max(2, int(el.scale * Wd))
+            from reel_engine.render.branding import anchor_frac
+            xf, yf = anchor_frac(el.position, bw / Wd, bw / H, sh, sv)
+            x0, y0 = int(xf * Wd), int(yf * H)
+            parts.append(f"drawbox=x={x0}:y={y0}:w={bw}:h={bw}:"
+                         f"color={fill}@{el.opacity:.2f}:t=fill{en}")
+            if font and el.text:
+                parts.append(dt(el.text, bw * 0.42, f"{x0}+({bw}-text_w)/2",
+                                f"{y0}+({bw}-text_h)/2", txt))
+        elif el.kind == "watermark":             # text mark (image handled elsewhere)
+            if not (font and el.text):
+                return "null"
+            x, y = self._text_xy(el.position, sh, sv)
+            parts.append(dt(el.text, max(14, Wd * el.scale * 0.35), x, y, txt, alpha=el.opacity))
+
+        return ",".join(parts) if parts else "null"
+
+    @staticmethod
+    def _text_xy(position: str, sh: float, sv: float) -> tuple:
+        """(x, y) expressions for a ``drawtext`` anchored by ``position``."""
+        if "left" in position:
+            x = f"w*{sh:.4f}"
+        elif "right" in position:
+            x = f"w-text_w-w*{sh:.4f}"
+        else:
+            x = "(w-text_w)/2"
+        if "top" in position:
+            y = f"h*{sv:.4f}"
+        elif "bottom" in position:
+            y = f"h-text_h-h*{sv:.4f}"
+        else:
+            y = "(h-text_h)/2"
+        return x, y
+
+    def _apply_branding(self, master: Path, tl) -> bool:
+        """Composite the branding track onto ``master`` via one filter_complex.
+
+        Image logos/watermarks are overlaid (scaled + alpha); intro/outro cards,
+        lower thirds, text badges and text watermarks are drawn. No-op when the
+        timeline has no branding. Returns whether anything was composited."""
+        if tl.branding is None or not tl.branding.has_elements:
+            return False
+        elements = resolve_branding(tl)
+        if not elements:
+            return False
+        meta = tl.meta
+        sh, sv = tl.branding.theme.safe_margin_h, tl.branding.theme.safe_margin_v
+        inputs: list[str] = ["-i", str(master)]
+        prep: list[str] = []
+        steps: list[str] = []
+        cur = "0:v"
+        img_idx = 1
+        for n, el in enumerate(elements, start=1):
+            out_lbl = f"b{n}"
+            if el.kind in ("logo", "watermark") and el.source is not None:
+                inputs += ["-i", str(el.source.uri)]
+                in_lbl, prep_lbl = f"{img_idx}:v", f"p{img_idx}"
+                img_idx += 1
+                target_w = max(2, int(el.scale * meta.width))
+                prep.append(f"[{in_lbl}]format=rgba,"
+                            f"colorchannelmixer=aa={el.opacity:.3f},"
+                            f"scale={target_w}:-1[{prep_lbl}]")
+                x, y = self._overlay_xy(el.position, sh, sv)
+                steps.append(f"[{cur}][{prep_lbl}]overlay={x}:{y}"
+                             f"{self._enable(el)}[{out_lbl}]")
+            else:
+                steps.append(f"[{cur}]{self._branding_draw(el, meta, sh, sv)}[{out_lbl}]")
+            cur = out_lbl
+
+        filter_complex = ";".join(prep + steps)
+        r = self.config.render
+        tmp = master.with_name(f"{master.stem}__brand{master.suffix}")
+        self._run([*inputs, "-filter_complex", filter_complex,
+                   "-map", f"[{cur}]", "-map", "0:a?",
+                   "-c:v", r.codec, "-pix_fmt", r.pix_fmt, "-b:v", r.bitrate,
+                   "-c:a", "copy", str(tmp)])
+        tmp.replace(master)
+        return True
+
     def _concat(self, scene_files: list[Path], out: Path, work: Path) -> None:
         listfile = work / "concat.txt"
         listfile.write_text("".join(f"file '{p.resolve()}'\n" for p in scene_files),
@@ -282,9 +421,10 @@ class FFmpegRenderer(TimelineRenderer):
                 self._render_scene(scene, tl.meta, sf)
                 scene_files.append(sf)
             self._concat(scene_files, out, work)
-            # Captions are a native Timeline track: burn them into the master
-            # BEFORE export so every aspect profile inherits them.
+            # Captions then branding are native Timeline tracks: composite them
+            # into the master BEFORE export so every aspect profile inherits them.
             captions_drawn = self._apply_captions(out, tl)
+            branding_drawn = self._apply_branding(out, tl)
 
             exports = list(self.export_master(out, request.export_profiles))
 
@@ -304,6 +444,6 @@ class FFmpegRenderer(TimelineRenderer):
             render_time_s=round(sw.elapsed_s, 4), timeline_hash=timeline_content_hash(tl),
             exports=tuple(exports),
             metadata={"has_text": self._font is not None, "font": self._font,
-                      "captions": captions_drawn,
+                      "captions": captions_drawn, "branding": branding_drawn,
                       "base_resolution": [tl.meta.width, tl.meta.height]},
         )

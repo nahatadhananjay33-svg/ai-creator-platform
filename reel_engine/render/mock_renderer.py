@@ -26,6 +26,7 @@ from reel_engine.interfaces.types import (
     Scene,
 )
 from reel_engine.render.base import TimelineRenderer, proxy_dimensions, scene_frame_count
+from reel_engine.render.branding import anchor_frac, resolve_branding
 from reel_engine.render.captions import CaptionDraw, caption_alpha, lower_caption_tracks
 from reel_engine.render.colors import rgb_to_bgr_bytes, rgb_tuple
 from reel_engine.timeline.hashing import timeline_content_hash
@@ -198,6 +199,66 @@ class MockRenderer(TimelineRenderer):
             out.append(painted)
         return out
 
+    # ---------------------------------------------------------- branding (C5)
+    def _branding_box(self, el, w: int, h: int, safe_h: float, safe_v: float) -> tuple:
+        """Deterministic (x0, x1, y0, y1) box for a branding element.
+
+        The mock has no font/image engine, so each element is a solid box placed
+        by the same position + safe-margin rules the FFmpeg backend lowers to —
+        enough to assert *where*, *when*, and *what colour* branding is, and to
+        keep the hermetic suite byte-for-byte reproducible."""
+        if el.full_frame:
+            return 0, w, 0, h
+        if el.kind == "lower_third":
+            box_w = int(w * (1 - 2 * safe_h))
+            box_h = max(2, int(h * 0.14))
+            x0, y0 = int(w * safe_h), int(h * (1 - safe_v - 0.14))
+            return x0, x0 + box_w, y0, min(h, y0 + box_h)
+        # logo (square) / watermark (wide-ish)
+        box_w = max(2, int(el.scale * w))
+        box_h = box_w if el.kind == "logo" else max(2, int(0.45 * box_w))
+        xf, yf = anchor_frac(el.position, box_w / w, box_h / h, safe_h, safe_v)
+        x0, y0 = int(xf * w), int(yf * h)
+        return x0, min(w, x0 + box_w), y0, min(h, y0 + box_h)
+
+    def _overlay_branding(self, frames: list, w: int, h: int, fps: int,
+                          timeline) -> list:
+        """Return a frame list with branding overlaid at absolute reel time."""
+        elements = resolve_branding(timeline)
+        if not elements:
+            return frames
+        theme = timeline.branding.theme
+        sh, sv = theme.safe_margin_h, theme.safe_margin_v
+        out: list = []
+        cache: dict = {}
+        for idx, base in enumerate(frames):
+            t = idx / fps
+            active = [el for el in elements if el.start_s - 1e-9 <= t <= el.end_s + 1e-9]
+            if not active:
+                out.append(base)
+                continue
+            sig = (id(base), tuple(id(el) for el in active))
+            painted = cache.get(sig)
+            if painted is None:
+                buf = bytearray(base)
+                for el in active:                       # already bottom-to-top
+                    x0, x1, y0, y1 = self._branding_box(el, w, h, sh, sv)
+                    bgr = rgb_to_bgr_bytes(el.fill_color)
+                    a = 1.0 if el.full_frame else max(0.0, min(1.0, el.opacity))
+                    for y in range(max(0, y0), min(h, y1)):
+                        row = y * w * 3
+                        for x in range(max(0, x0), min(w, x1)):
+                            o = row + x * 3
+                            if a >= 0.999:
+                                buf[o:o + 3] = bgr
+                            else:
+                                for k in range(3):
+                                    buf[o + k] = int(round(buf[o + k] * (1 - a) + bgr[k] * a))
+                painted = bytes(buf)
+                cache[sig] = painted
+            out.append(painted)
+        return out
+
     def render(self, request: RenderRequest) -> RenderResult:
         tl = validate_or_raise(request.timeline)
         fps = tl.meta.fps
@@ -212,9 +273,10 @@ class MockRenderer(TimelineRenderer):
             base_frames: list[bytes] = []
             for frame, count in per_scene:
                 base_frames.extend([frame] * count)
-            # Captions are a native Timeline track: overlay them in absolute reel
-            # time (no-op when the timeline has no caption tracks).
+            # Captions then branding are native Timeline tracks: overlay them in
+            # absolute reel time (branding on top; each a no-op when absent).
             frames = self._overlay_captions(base_frames, w, h, fps, tl)
+            frames = self._overlay_branding(frames, w, h, fps, tl)
             write_raw_avi(out, VideoFrames(frames=frames, width=w, height=h, fps=float(fps)))
 
             audio_path = self._write_silent_audio(out.with_suffix(".wav"), tl.duration_s)
@@ -231,8 +293,9 @@ class MockRenderer(TimelineRenderer):
                         scaled_cache[i] = self._scale_pad(frame, w, h, name)
                     sframe, ew, eh, prof = scaled_cache[i]
                     ex_frames.extend([sframe] * count)
-                # Exports inherit captions too (parity with the FFmpeg backend).
+                # Exports inherit captions + branding too (FFmpeg parity).
                 ex_frames = self._overlay_captions(ex_frames, ew, eh, fps, tl)
+                ex_frames = self._overlay_branding(ex_frames, ew, eh, fps, tl)
                 ex_path = out.with_name(f"{out.stem}__{name}{out.suffix}")
                 write_raw_avi(ex_path, VideoFrames(ex_frames, ew, eh, float(fps)))
                 exports.append(ExportOutput(profile=name, path=ex_path,
