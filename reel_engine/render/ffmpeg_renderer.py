@@ -88,7 +88,41 @@ class FFmpegRenderer(TimelineRenderer):
             f"box=1:boxcolor=black@0.35:boxborderw=24"
         )
 
+    def _render_video_scene(self, scene: Scene, meta, out: Path, vclip) -> None:
+        """Render a scene whose frame comes from a real media file (C3).
+
+        The footage is fitted into the master frame with the same scale+pad math
+        the export path uses (letterbox, never distort), forced to the master fps
+        and even dimensions. Audio comes from the scene's real ``audio_file``
+        clip when present (the authoritative Voice Engine WAV) — muxed over the
+        footage — otherwise a silent bed, so every scene has a uniform stream
+        layout and the stream-copy concat stays valid."""
+        r = self.config.render
+        video_path = vclip.source.uri
+        aclip = scene.audio_file_clip()
+        args = ["-i", str(video_path)]
+        if aclip is not None and aclip.source is not None:
+            args += ["-i", str(aclip.source.uri)]
+        else:
+            args += ["-f", "lavfi", "-i",
+                     f"anullsrc=channel_layout=mono:sample_rate={r.audio_sample_rate}"]
+        vf = (f"scale={meta.width}:{meta.height}:force_original_aspect_ratio=decrease,"
+              f"pad={meta.width}:{meta.height}:(ow-iw)/2:(oh-ih)/2:color=black,"
+              f"setsar=1,fps={meta.fps}")
+        args += [
+            "-vf", vf, "-map", "0:v:0", "-map", "1:a:0",
+            "-t", f"{scene.duration_s}", "-c:v", r.codec, "-pix_fmt", r.pix_fmt,
+            "-b:v", r.bitrate, "-r", str(meta.fps),
+            "-c:a", r.audio_codec, "-ar", str(r.audio_sample_rate), "-ac", "1",
+            "-shortest", str(out),
+        ]
+        self._run(args)
+
     def _render_scene(self, scene: Scene, meta, out: Path) -> None:
+        vclip = scene.video_clip()
+        if vclip is not None:
+            self._render_video_scene(scene, meta, out, vclip)
+            return
         r = self.config.render
         color = rgb_to_hex(scene.background_color())
         args = [

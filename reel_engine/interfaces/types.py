@@ -129,6 +129,62 @@ class Scene:
         t = self.track("text")
         return t.clips if t else ()
 
+    def video_clip(self) -> "Clip | None":
+        """The scene's single foreground video clip, if it is a video scene.
+
+        A video scene (see :meth:`from_video`) carries a real talking-head/media
+        file on a ``video`` track instead of a synthetic ``solid_color``
+        background — this is what lets C3 render generated avatar footage through
+        the same Timeline the C2 skeleton rendered solid cards through."""
+        vt = self.track("video")
+        return vt.clips[0] if (vt and vt.clips) else None
+
+    def audio_file_clip(self) -> "Clip | None":
+        """The scene's real (non-silent) audio clip, if any. C3 uses this to mux
+        the Voice Engine WAV over the avatar footage; C2 scenes only ever have a
+        silent bed and return ``None`` here."""
+        at = self.track("audio")
+        if at:
+            for clip in at.clips:
+                if clip.kind == "audio_file":
+                    return clip
+        return None
+
+    @classmethod
+    def from_video(
+        cls,
+        index: int,
+        video_uri: str,
+        *,
+        duration_s: float,
+        audio_uri: str | None = None,
+        scene_id: str | None = None,
+    ) -> "Scene":
+        """Build a one–video(+optional real-audio) scene from generated media.
+
+        This is the C3 counterpart of :meth:`simple`: instead of a synthetic
+        solid background it places a real media file (e.g. a talking-head MP4) on
+        a ``video`` track that fills the frame, and — when ``audio_uri`` is given
+        — the authoritative speech WAV on the ``audio`` track so the renderer
+        muxes real audio rather than a silent bed. No overlays, transitions, or
+        transforms: it is the minimal video scene that proves the interface.
+        """
+        sid = scene_id or f"scene-{index:03d}"
+        vid_clip = Clip(clip_id=f"{sid}-video", kind="video",
+                        start_s=0.0, end_s=duration_s,
+                        source=AssetRef(kind="file", uri=video_uri))
+        tracks = [Track(track_id=f"{sid}-video-track", kind="video", clips=(vid_clip,))]
+        if audio_uri:
+            aud_clip = Clip(clip_id=f"{sid}-audio", kind="audio_file",
+                            start_s=0.0, end_s=duration_s,
+                            source=AssetRef(kind="file", uri=audio_uri))
+        else:
+            aud_clip = Clip(clip_id=f"{sid}-audio", kind="silent_audio",
+                            start_s=0.0, end_s=duration_s,
+                            source=AssetRef(kind="silent_audio", uri="generated:silent"))
+        tracks.append(Track(track_id=f"{sid}-audio-track", kind="audio", clips=(aud_clip,)))
+        return cls(scene_id=sid, index=index, duration_s=duration_s, tracks=tuple(tracks))
+
     @classmethod
     def simple(
         cls,

@@ -34,6 +34,10 @@ def _validate_clip(clip: Clip, scene_duration: float, where: str) -> list[str]:
         problems.append(f"{where}: solid_color clip {clip.clip_id!r} has an invalid RGB colour")
     if clip.kind == "text" and not (clip.text and clip.text.strip()):
         problems.append(f"{where}: text clip {clip.clip_id!r} has empty text")
+    # C3 media clips (video footage / real audio) reference a source file whose
+    # uri the renderer decodes — an empty source makes the scene unrenderable.
+    if clip.kind in ("video", "audio_file") and not (clip.source and clip.source.uri):
+        problems.append(f"{where}: {clip.kind} clip {clip.clip_id!r} has no source file")
     return problems
 
 
@@ -69,9 +73,14 @@ def validate_timeline(tl: Timeline) -> list[str]:
         seen_ids.add(scene.scene_id)
         if scene.duration_s <= 0:
             problems.append(f"{where}: duration_s must be positive, got {scene.duration_s}")
+        # A scene is renderable if it has *something* to draw the frame from:
+        # a solid-colour background (C2) or a foreground video file (C3).
         bg = scene.track("background")
-        if bg is None or not bg.clips:
-            problems.append(f"{where}: no background track/clip (nothing to render)")
+        vid = scene.track("video")
+        has_background = bg is not None and bg.clips
+        has_video = vid is not None and vid.clips
+        if not has_background and not has_video:
+            problems.append(f"{where}: no background or video track/clip (nothing to render)")
         for track in scene.tracks:
             for clip in track.clips:
                 problems.extend(_validate_clip(clip, scene.duration_s, where))
