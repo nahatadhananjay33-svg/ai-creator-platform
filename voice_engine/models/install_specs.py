@@ -14,6 +14,7 @@ from __future__ import annotations
 import sys
 
 from foundation.model_manager.installer import TORCH_CPU_INDEX, InstallSpec
+from voice_engine.models.chatterbox_weights import build_prefetch_code as build_chatterbox_prefetch
 from voice_engine.models.kokoro_weights import build_prefetch_code as build_kokoro_prefetch
 
 _IS_WINDOWS = sys.platform == "win32"
@@ -77,9 +78,29 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
     ),
     "chatterbox": InstallSpec(
         model_id="chatterbox",
+        # torch 2.6.0 is chatterbox-tts 0.1.7's exact pin (its requires_dist:
+        # torch==2.6.0 / torchaudio==2.6.0 for python<3.14). Pre-installing it
+        # with the right index means the later `chatterbox-tts` pip call finds
+        # the pin already satisfied and never downgrades/rebuilds torch. The
+        # T4 is sm_75, supported by the cu124 wheels torch 2.6.0 ships (the
+        # default PyPI Linux wheel is already cu124, but pinning the index makes
+        # the CUDA build explicit — the LatentSync/MuseTalk lesson). GPU-aware
+        # (A3.8): cu124 index on a GPU host, CPU index otherwise. chatterbox-tts
+        # itself pins numpy<2 / transformers==5.2.0 / diffusers==0.29.0 etc.;
+        # one isolated venv, so those pins never collide with other models.
+        torch="auto",
+        torch_packages=("torch==2.6.0", "torchaudio==2.6.0"),
+        torch_cuda_index="https://download.pytorch.org/whl/cu124",
         pip_groups=(("chatterbox-tts",) + _PLATFORM_CORE,),
-        verify_imports=("chatterbox",),
+        verify_imports=("chatterbox", "soundfile"),
+        # Prefetch every weight straight from the manifest (offline-ready,
+        # hard-validated) instead of relying on the adapter's lazy first-use
+        # snapshot_download. huggingface_hub only; no pip/ensurepip.
+        prefetch_code=build_chatterbox_prefetch(),
         approx_download_gb=4.5,
+        platform_notes="GPU strongly recommended (~6.5 GB VRAM fp16, fits the 15 GB T4); "
+        "CPU inference is far from real time. Weights (t3_mtl23ls_v2 + s3gen + ve + "
+        "conds + tokenizers, ~3.2 GB) fetched from HF ResembleAI/chatterbox via the manifest.",
     ),
     "indic-parler": InstallSpec(
         model_id="indic-parler",
