@@ -1,0 +1,26 @@
+# Visual Asset Engine defaults (Phase C6).
+#
+# Configuration, not code: pick default layouts, animations, durations, safe
+# margins, overlay opacity, and picture-in-picture size — via AICP__assets__*
+# env overrides or a user config file, with no code change. All timing is in
+# seconds; margins/sizes are fractions of the frame.
+
+assets:
+  default_layout: full_screen     # full_screen|picture_in_picture|split_screen|side_by_side|top_banner|bottom_banner|floating_card|background_replacement
+  default_duration_s: 3.0         # used when a spec gives no explicit end
+  overlay_opacity: 1.0            # default clip opacity (0..1)
+
+  safe_margin_v: 0.06             # safe area kept clear top+bottom (fraction)
+  safe_margin_h: 0.05             # safe area kept clear each side (fraction)
+
+  picture_in_picture:
+    scale: 0.30                   # PIP width as a fraction of the frame
+    corner: bottom_right          # top_left|top_right|bottom_left|bottom_right
+    margin: 0.05                  # inset from the frame edge
+
+  animation:
+    kind_in: fade_in              # none|fade_in|fade_out|slide_left|slide_right|scale|cross_dissolve
+    kind_out: fade_out
+    duration_s: 0.4
+
+  transition: cut                 # cut | cross_dissolve
