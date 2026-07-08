@@ -27,3 +27,16 @@ python -m branding_engine.scripts.render_branding_demo --theme finance
 ```
 
 See `docs/BRANDING_ENGINE.md` for architecture, the theme system, and limitations.
+
+## Visual Asset Engine (Phase C6)
+
+Full slice — talking-head → image B-roll → talking-head → video B-roll, plus
+picture-in-picture and split-screen, as a native Timeline asset track:
+
+```
+python -m asset_engine.scripts.render_asset_demo                  # real MP4 (ffmpeg)
+python -m asset_engine.scripts.render_asset_demo --renderer mock  # hermetic proxy
+python -m asset_engine.scripts.render_asset_demo --no-overlays    # assets only
+```
+
+See `docs/VISUAL_ASSET_ENGINE.md` for architecture, layouts, and limitations.
