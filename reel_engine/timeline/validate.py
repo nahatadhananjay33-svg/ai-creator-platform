@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from foundation.exceptions import ConfigError
 from reel_engine.interfaces.types import (
+    ASSET_ANIMATIONS,
+    ASSET_FITS,
+    ASSET_KINDS,
+    ASSET_LAYOUTS,
+    ASSET_TRANSITIONS,
     BRANDING_POSITIONS,
     TIMELINE_SCHEMA_VERSION,
     Clip,
@@ -101,6 +106,11 @@ def validate_timeline(tl: Timeline) -> list[str]:
     # v1/v2 timelines, which skip this entirely.
     if tl.branding is not None:
         problems.extend(_validate_branding(tl.branding, reel_duration))
+
+    # Visual-asset (B-roll) tracks (C6), also absolute reel time.
+    asset_ids: set[str] = set()
+    for i, track in enumerate(tl.asset_tracks):
+        problems.extend(_validate_asset_track(track, i, reel_duration, asset_ids))
 
     return problems
 
@@ -278,6 +288,73 @@ def _validate_branding(track, reel_duration: float) -> list[str]:
             problems.append(
                 f"{where}: window [{lt.start_s}, {lt.end_s}] outside reel "
                 f"[0, {reel_duration}]")
+    return problems
+
+
+def _frac_rect(x, y, w, h, where: str, what: str) -> list[str]:
+    """A rectangle given as fractions must sit inside the unit square."""
+    problems: list[str] = []
+    if w <= 0 or h <= 0:
+        problems.append(f"{where}: {what} must have positive size, got w={w} h={h}")
+    for name, v in (("x", x), ("y", y), ("w", w), ("h", h)):
+        if v < -_EPS or v > 1.0 + _EPS:
+            problems.append(f"{where}: {what}.{name} {v} outside [0, 1]")
+    if x + w > 1.0 + _EPS or y + h > 1.0 + _EPS:
+        problems.append(f"{where}: {what} [{x}, {y}, {w}, {h}] extends past the frame")
+    return problems
+
+
+def _validate_asset_clip(clip, where: str, reel_duration: float) -> list[str]:
+    problems: list[str] = []
+    if clip.kind not in ASSET_KINDS:
+        problems.append(f"{where}: kind {clip.kind!r} not in {ASSET_KINDS}")
+    if clip.source is None or not (clip.source.uri and str(clip.source.uri).strip()):
+        problems.append(f"{where}: missing source asset (no file)")
+    if clip.end_s <= clip.start_s:
+        problems.append(f"{where}: end_s {clip.end_s} <= start_s {clip.start_s}")
+    if clip.start_s < -_EPS or clip.end_s > reel_duration + _EPS:
+        problems.append(
+            f"{where}: window [{clip.start_s}, {clip.end_s}] outside reel "
+            f"[0, {reel_duration}]")
+    if not (0.0 <= clip.opacity <= 1.0):
+        problems.append(f"{where}: opacity must be in [0, 1], got {clip.opacity}")
+    if clip.layout.kind not in ASSET_LAYOUTS:
+        problems.append(f"{where}: layout.kind {clip.layout.kind!r} not in {ASSET_LAYOUTS}")
+    if not (0.0 < clip.layout.scale <= 1.0):
+        problems.append(f"{where}: layout.scale must be in (0, 1], got {clip.layout.scale}")
+    for anim, label in ((clip.animation_in, "animation_in"),
+                        (clip.animation_out, "animation_out")):
+        if anim.kind not in ASSET_ANIMATIONS:
+            problems.append(f"{where}: {label}.kind {anim.kind!r} not in {ASSET_ANIMATIONS}")
+        if anim.duration_s < 0:
+            problems.append(f"{where}: {label}.duration_s must be non-negative")
+    if clip.transition.kind not in ASSET_TRANSITIONS:
+        problems.append(f"{where}: transition.kind {clip.transition.kind!r} "
+                        f"not in {ASSET_TRANSITIONS}")
+    if clip.placement is not None:
+        p = clip.placement
+        if p.fit not in ASSET_FITS:
+            problems.append(f"{where}: placement.fit {p.fit!r} not in {ASSET_FITS}")
+        problems.extend(_frac_rect(p.x, p.y, p.w, p.h, where, "placement"))
+    problems.extend(_frac_rect(clip.crop.x, clip.crop.y, clip.crop.w, clip.crop.h,
+                               where, "crop"))
+    return problems
+
+
+def _validate_asset_track(track, index: int, reel_duration: float,
+                          seen_ids: set) -> list[str]:
+    problems: list[str] = []
+    where0 = f"asset_track[{index}] {track.track_id!r}"
+    if track.track_id in seen_ids:
+        problems.append(f"{where0}: duplicate asset track_id")
+    seen_ids.add(track.track_id)
+    clip_ids: set[str] = set()
+    for clip in track.clips:
+        where = f"{where0} clip {clip.clip_id!r}"
+        if clip.clip_id in clip_ids:
+            problems.append(f"{where}: duplicate clip_id")
+        clip_ids.add(clip.clip_id)
+        problems.extend(_validate_asset_clip(clip, where, reel_duration))
     return problems
 
 

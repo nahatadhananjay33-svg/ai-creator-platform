@@ -13,7 +13,14 @@ from typing import Any
 
 from reel_engine.interfaces.types import (
     TIMELINE_SCHEMA_VERSION,
+    AssetAnimation,
+    AssetClip,
+    AssetCrop,
+    AssetLayout,
+    AssetPlacement,
     AssetRef,
+    AssetTrack,
+    AssetTransition,
     BrandingElement,
     BrandingTrack,
     CaptionAnimation,
@@ -168,6 +175,49 @@ def _branding_to_dict(b: BrandingTrack) -> dict[str, Any]:
     }
 
 
+# ---- visual assets (C6) ----
+def _crop_to_dict(c: AssetCrop) -> dict[str, Any]:
+    return {"x": c.x, "y": c.y, "w": c.w, "h": c.h}
+
+
+def _placement_to_dict(p: AssetPlacement | None) -> dict[str, Any] | None:
+    if p is None:
+        return None
+    return {"x": p.x, "y": p.y, "w": p.w, "h": p.h, "fit": p.fit}
+
+
+def _layout_to_dict(l: AssetLayout) -> dict[str, Any]:
+    return {"kind": l.kind, "corner": l.corner, "side": l.side,
+            "scale": l.scale, "margin": l.margin}
+
+
+def _asset_anim_to_dict(a: AssetAnimation) -> dict[str, Any]:
+    return {"kind": a.kind, "duration_s": a.duration_s}
+
+
+def _asset_transition_to_dict(t: AssetTransition) -> dict[str, Any]:
+    return {"kind": t.kind, "duration_s": t.duration_s}
+
+
+def _asset_clip_to_dict(c: AssetClip) -> dict[str, Any]:
+    return {
+        "clip_id": c.clip_id, "kind": c.kind, "source": _asset_to_dict(c.source),
+        "start_s": c.start_s, "end_s": c.end_s,
+        "layout": _layout_to_dict(c.layout),
+        "placement": _placement_to_dict(c.placement),
+        "crop": _crop_to_dict(c.crop),
+        "animation_in": _asset_anim_to_dict(c.animation_in),
+        "animation_out": _asset_anim_to_dict(c.animation_out),
+        "transition": _asset_transition_to_dict(c.transition),
+        "opacity": c.opacity, "z_index": c.z_index,
+    }
+
+
+def _asset_track_to_dict(t: AssetTrack) -> dict[str, Any]:
+    return {"track_id": t.track_id,
+            "clips": [_asset_clip_to_dict(c) for c in t.clips]}
+
+
 def timeline_to_dict(tl: Timeline) -> dict[str, Any]:
     """Plain JSON-able mapping for a Timeline (stable field order)."""
     d = {
@@ -178,6 +228,8 @@ def timeline_to_dict(tl: Timeline) -> dict[str, Any]:
     }
     if tl.branding is not None:
         d["branding"] = _branding_to_dict(tl.branding)
+    if tl.asset_tracks:
+        d["asset_tracks"] = [_asset_track_to_dict(t) for t in tl.asset_tracks]
     return d
 
 
@@ -343,10 +395,68 @@ def _branding_from_dict(d: dict[str, Any] | None) -> BrandingTrack | None:
     )
 
 
+# ---- visual assets (C6) ----
+def _crop_from_dict(d: dict[str, Any] | None) -> AssetCrop:
+    if not d:
+        return AssetCrop()
+    return AssetCrop(x=d.get("x", 0.0), y=d.get("y", 0.0),
+                     w=d.get("w", 1.0), h=d.get("h", 1.0))
+
+
+def _placement_from_dict(d: dict[str, Any] | None) -> AssetPlacement | None:
+    if not d:
+        return None
+    return AssetPlacement(x=d.get("x", 0.0), y=d.get("y", 0.0),
+                          w=d.get("w", 1.0), h=d.get("h", 1.0),
+                          fit=d.get("fit", "contain"))
+
+
+def _layout_from_dict(d: dict[str, Any] | None) -> AssetLayout:
+    if not d:
+        return AssetLayout()
+    return AssetLayout(kind=d.get("kind", "full_screen"),
+                       corner=d.get("corner", "bottom_right"),
+                       side=d.get("side", "right"), scale=d.get("scale", 0.30),
+                       margin=d.get("margin", 0.05))
+
+
+def _asset_anim_from_dict(d: dict[str, Any] | None) -> AssetAnimation:
+    if not d:
+        return AssetAnimation()
+    return AssetAnimation(kind=d.get("kind", "none"), duration_s=d.get("duration_s", 0.4))
+
+
+def _asset_transition_from_dict(d: dict[str, Any] | None) -> AssetTransition:
+    if not d:
+        return AssetTransition()
+    return AssetTransition(kind=d.get("kind", "cut"), duration_s=d.get("duration_s", 0.5))
+
+
+def _asset_clip_from_dict(d: dict[str, Any]) -> AssetClip:
+    return AssetClip(
+        clip_id=d["clip_id"], kind=d.get("kind", "image"),
+        source=_asset_from_dict(d.get("source")),
+        start_s=d.get("start_s", 0.0), end_s=d.get("end_s", 0.0),
+        layout=_layout_from_dict(d.get("layout")),
+        placement=_placement_from_dict(d.get("placement")),
+        crop=_crop_from_dict(d.get("crop")),
+        animation_in=_asset_anim_from_dict(d.get("animation_in")),
+        animation_out=_asset_anim_from_dict(d.get("animation_out")),
+        transition=_asset_transition_from_dict(d.get("transition")),
+        opacity=d.get("opacity", 1.0), z_index=d.get("z_index", 0),
+    )
+
+
+def _asset_track_from_dict(d: dict[str, Any]) -> AssetTrack:
+    return AssetTrack(track_id=d.get("track_id", "assets"),
+                      clips=tuple(_asset_clip_from_dict(c) for c in d.get("clips", ())))
+
+
 def timeline_from_dict(d: dict[str, Any]) -> Timeline:
     """Rebuild a Timeline from a mapping. Rejects unknown future schema
-    versions loudly rather than silently mis-parsing. ``caption_tracks`` and
-    ``branding`` are optional so v1/v2 projects load unchanged."""
+    versions loudly rather than silently mis-parsing. ``caption_tracks``,
+    ``branding`` and ``asset_tracks`` are optional so older projects load
+    unchanged."""
     version = d.get("schema_version", TIMELINE_SCHEMA_VERSION)
     if version > TIMELINE_SCHEMA_VERSION:
         raise ValueError(
@@ -359,6 +469,8 @@ def timeline_from_dict(d: dict[str, Any]) -> Timeline:
         caption_tracks=tuple(_caption_track_from_dict(t)
                              for t in d.get("caption_tracks", ())),
         branding=_branding_from_dict(d.get("branding")),
+        asset_tracks=tuple(_asset_track_from_dict(t)
+                           for t in d.get("asset_tracks", ())),
         schema_version=version,
     )
 

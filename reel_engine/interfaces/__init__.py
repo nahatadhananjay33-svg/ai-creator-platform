@@ -6,9 +6,21 @@ and other engines depend on these, never on ``reel_engine`` internals.
 from __future__ import annotations
 
 from reel_engine.interfaces.types import (
+    ASSET_ANIMATIONS,
+    ASSET_FITS,
+    ASSET_KINDS,
+    ASSET_LAYOUTS,
+    ASSET_TRANSITIONS,
     BRANDING_POSITIONS,
     TIMELINE_SCHEMA_VERSION,
+    AssetAnimation,
+    AssetClip,
+    AssetCrop,
+    AssetLayout,
+    AssetPlacement,
     AssetRef,
+    AssetTrack,
+    AssetTransition,
     BrandingElement,
     BrandingTrack,
     CaptionAnimation,
@@ -35,9 +47,21 @@ from reel_engine.interfaces.types import (
 )
 
 __all__ = [
+    "ASSET_ANIMATIONS",
+    "ASSET_FITS",
+    "ASSET_KINDS",
+    "ASSET_LAYOUTS",
+    "ASSET_TRANSITIONS",
     "BRANDING_POSITIONS",
     "TIMELINE_SCHEMA_VERSION",
+    "AssetAnimation",
+    "AssetClip",
+    "AssetCrop",
+    "AssetLayout",
+    "AssetPlacement",
     "AssetRef",
+    "AssetTrack",
+    "AssetTransition",
     "BrandingElement",
     "BrandingTrack",
     "CaptionAnimation",

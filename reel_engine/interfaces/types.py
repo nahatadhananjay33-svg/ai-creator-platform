@@ -26,9 +26,9 @@ from typing import Any
 #: Bumped whenever the serialized Timeline schema changes incompatibly. serde
 #: writes it into every project file; the loader validates/migrates against it.
 #: v2 (Phase C4) added ``Timeline.caption_tracks``; v3 (Phase C5) added
-#: ``Timeline.branding`` — both purely additive: v1/v2 projects still load (they
-#: simply have no caption tracks / no branding).
-TIMELINE_SCHEMA_VERSION = 3
+#: ``Timeline.branding``; v4 (Phase C6) added ``Timeline.asset_tracks`` — all
+#: purely additive: older projects still load (they simply have none of them).
+TIMELINE_SCHEMA_VERSION = 4
 
 #: RGB colour, 0-255 per channel (the IR is colour-space agnostic; renderers
 #: convert to whatever their pipeline needs — e.g. BGR24 frames).
@@ -479,6 +479,142 @@ class BrandingTrack:
                     self.lower_thirds))
 
 
+# =========================================================================
+# Visual Assets / B-roll (Phase C6) — a native Timeline track, timed in ABSOLUTE
+# reel time. Visual assets are data, not a renderer special-case: the Visual
+# Asset Engine populates these frozen types (clips with a layout, placement,
+# crop, and simple animations) and the renderer lowers them to overlays.
+# Everything stays immutable and additive, so v1..v3 timelines are unaffected.
+# =========================================================================
+#: Asset content kinds. Only ``video`` decodes as video; the rest are static
+#: images (the label is a semantic hint, not a different render path).
+ASSET_KINDS = ("image", "video", "screenshot", "chart", "document", "map",
+               "icon", "illustration")
+#: High-level layouts a clip may use (resolved to an :class:`AssetPlacement`).
+ASSET_LAYOUTS = ("full_screen", "picture_in_picture", "split_screen",
+                 "side_by_side", "top_banner", "bottom_banner", "floating_card",
+                 "background_replacement")
+#: How an asset fits its destination rectangle.
+ASSET_FITS = ("contain", "cover", "stretch")
+#: Simple, deterministic per-clip animations (enter/exit).
+ASSET_ANIMATIONS = ("none", "fade_in", "fade_out", "slide_left", "slide_right",
+                    "scale", "cross_dissolve")
+#: Clip in-transitions.
+ASSET_TRANSITIONS = ("cut", "cross_dissolve")
+
+
+@dataclass(frozen=True)
+class AssetCrop:
+    """A source crop as fractions of the source image/video (``x,y,w,h`` in
+    [0,1]). The default keeps the whole source."""
+
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 1.0
+    h: float = 1.0
+
+    @property
+    def is_full(self) -> bool:
+        return (self.x, self.y, self.w, self.h) == (0.0, 0.0, 1.0, 1.0)
+
+
+@dataclass(frozen=True)
+class AssetPlacement:
+    """A destination rectangle as fractions of the frame + a fit mode. This is
+    the concrete geometry a layout resolves to (or an explicit override)."""
+
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 1.0
+    h: float = 1.0
+    fit: str = "contain"                   # contain | cover | stretch
+
+
+@dataclass(frozen=True)
+class AssetLayout:
+    """A high-level layout that resolves to an :class:`AssetPlacement`.
+
+    ``corner`` positions ``picture_in_picture``/``floating_card``; ``side``
+    picks the half for ``split_screen``/``side_by_side``; ``scale`` is the PIP/
+    card width fraction; ``margin`` insets floating/banner/PIP layouts."""
+
+    kind: str = "full_screen"
+    corner: str = "bottom_right"           # top_left|top_right|bottom_left|bottom_right
+    side: str = "right"                    # left | right
+    scale: float = 0.30                    # fraction of frame width (PIP/card)
+    margin: float = 0.05                   # inset fraction
+
+
+@dataclass(frozen=True)
+class AssetAnimation:
+    """A simple deterministic enter/exit effect over ``duration_s`` seconds."""
+
+    kind: str = "none"                     # see ASSET_ANIMATIONS
+    duration_s: float = 0.4
+
+
+@dataclass(frozen=True)
+class AssetTransition:
+    """A clip in-transition (a cross dissolve blends with what is underneath)."""
+
+    kind: str = "cut"                      # cut | cross_dissolve
+    duration_s: float = 0.5
+
+
+@dataclass(frozen=True)
+class AssetClip:
+    """One visual asset placed on screen over an absolute time window.
+
+    ``kind`` is the content type; ``source`` references a local file. Geometry
+    comes from ``layout`` (resolved by the layout system) unless ``placement``
+    overrides it. ``crop`` selects a source region; ``animation_in``/
+    ``animation_out`` are the enter/exit effects; ``opacity`` and ``z_index``
+    control blending and layer order (higher ``z_index`` = on top)."""
+
+    clip_id: str
+    kind: str = "image"
+    source: AssetRef | None = None
+    start_s: float = 0.0
+    end_s: float = 0.0
+    layout: AssetLayout = field(default_factory=AssetLayout)
+    placement: AssetPlacement | None = None
+    crop: AssetCrop = field(default_factory=AssetCrop)
+    animation_in: AssetAnimation = field(default_factory=AssetAnimation)
+    animation_out: AssetAnimation = field(default_factory=AssetAnimation)
+    transition: AssetTransition = field(default_factory=AssetTransition)
+    opacity: float = 1.0
+    z_index: int = 0
+
+    @property
+    def duration_s(self) -> float:
+        return round(self.end_s - self.start_s, 6)
+
+    @property
+    def is_video(self) -> bool:
+        return self.kind == "video"
+
+
+@dataclass(frozen=True)
+class AssetTrack:
+    """An ordered set of visual-asset clips (B-roll), all in absolute reel time.
+    Clips may overlap; the renderer layers them by ``z_index`` then start."""
+
+    track_id: str = "assets"
+    clips: tuple = ()                      # tuple[AssetClip, ...]
+
+    @property
+    def has_clips(self) -> bool:
+        return bool(self.clips)
+
+    @property
+    def n_clips(self) -> int:
+        return len(self.clips)
+
+    @property
+    def duration_s(self) -> float:
+        return round(max((c.end_s for c in self.clips), default=0.0), 6)
+
+
 @dataclass(frozen=True)
 class TimelineMeta:
     """Global, render-relevant metadata. Deliberately free of timestamps or any
@@ -508,6 +644,7 @@ class Timeline:
     scenes: tuple = ()              # tuple[Scene, ...] in play order
     caption_tracks: tuple = ()      # tuple[CaptionTrack, ...] — C4; absolute reel time
     branding: "BrandingTrack | None" = None   # C5; native branding track (absolute time)
+    asset_tracks: tuple = ()        # tuple[AssetTrack, ...] — C6; B-roll, absolute time
     schema_version: int = TIMELINE_SCHEMA_VERSION
 
     @property
@@ -525,6 +662,10 @@ class Timeline:
     @property
     def has_branding(self) -> bool:
         return self.branding is not None and self.branding.has_elements
+
+    @property
+    def has_assets(self) -> bool:
+        return any(t.clips for t in self.asset_tracks)
 
 
 @dataclass(frozen=True)
