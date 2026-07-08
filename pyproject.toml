@@ -54,6 +54,9 @@ packages = { find = { include = [
 [tool.pytest.ini_options]
 testpaths = ["foundation/tests", "voice_engine/tests", "avatar_engine/tests"]
 addopts = "-q"
+markers = [
+    "integration: end-to-end test exercising real engines (may need ffmpeg/models)",
+]
 
 [tool.mypy]
 python_version = "3.10"
