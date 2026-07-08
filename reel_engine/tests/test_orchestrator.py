@@ -216,3 +216,20 @@ def test_end_to_end_real_engine_stack(tmp_path):
     (export,) = res.exports
     ep = probe_media(export.path)
     assert (ep.width, ep.height) == (1080, 1920)       # profile export produced
+
+
+# --------------------------------------------------------------- benchmark wiring
+def test_pipeline_benchmark_records_stage_timings(tmp_path):
+    """The benchmark harness runs the pipeline (mock renderer, hermetic) and
+    records every stage timing + memory metric the runner attaches."""
+    from reel_engine.orchestrator.benchmark import PipelineBenchmark, PipelineBenchmarkConfig
+
+    cfg = PipelineBenchmarkConfig(renderer="mock", width=180, height=320, fps=12,
+                                  profiles=["reel_9x16"], repetitions=1)
+    run, reports = PipelineBenchmark(cfg, output_dir=tmp_path).run()
+    (case,) = run.cases
+    assert case.status.value == "passed"
+    names = {m.name for m in case.measurements}
+    assert {"voice_ms", "avatar_ms", "timeline_ms", "render_ms", "export_ms",
+            "total_ms", "rss_mb"} <= names
+    assert reports["json"].exists() and reports["csv"].exists()
