@@ -118,6 +118,16 @@ $new = "THE-hostname.trycloudflare.com"
 
 Then `ssh colab whoami` and reconnect VS Code.
 
+### `websocket: bad handshake`
+
+This means cloudflared reached Cloudflare's edge but there is **no live tunnel** registered
+for that hostname — the quick tunnel died at the edge while its process kept running (a
+"zombie"). The fix is always the same: **re-run the bootstrap cell**. It now kills any
+existing tunnel and starts a fresh one, waiting until it is actually *edge-registered*
+(`Registered tunnel connection`) before printing the hostname — so the hostname it gives you
+is guaranteed live. Then paste the new PowerShell line and reconnect. (The watchdog also
+now restarts a never-registered zombie automatically.)
+
 ---
 
 ## 5. Checkpoint workflow
