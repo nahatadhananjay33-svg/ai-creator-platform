@@ -14,29 +14,38 @@ from __future__ import annotations
 import sys
 
 from foundation.model_manager.installer import TORCH_CPU_INDEX, InstallSpec
+from voice_engine.models.kokoro_weights import build_prefetch_code as build_kokoro_prefetch
 
 _IS_WINDOWS = sys.platform == "win32"
 _PLATFORM_CORE = ("pyyaml", "psutil", "soundfile", "numpy")
 
 #: Kokoro's English G2P (misaki) needs spaCy's ``en_core_web_sm`` model, which
 #: is NOT a pip dependency of anything — so English synthesis fails with spaCy
-#: [E050] "Can't find model" unless it is fetched explicitly. This downloads it
-#: automatically (version-matched via spaCy's own downloader), idempotently.
-#: uv-created venvs ship no pip, so pip is bootstrapped first when needed.
+#: [E050] "Can't find model". We install it as a pinned wheel in ``pip_groups``
+#: (below) so uv places it in the venv at build time. (B2.1: the old prefetch
+#: ran ``spacy download`` at runtime, which shells out to pip and bootstraps it
+#: via ``ensurepip`` — but uv venvs ship neither pip nor ensurepip, so that
+#: aborted with ModuleNotFoundError. Same lesson as LatentSync: don't touch
+#: pip/ensurepip in a prefetch.) The model wheel targets spaCy 3.8.x, which
+#: kokoro>=0.9 pulls; bump it in lockstep if kokoro moves to a new spaCy minor.
+_SPACY_EN_MODEL = (
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/"
+    "en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+)
+
+#: Prefetch: verify the (pip-installed) G2P model loads, then pull every weight
+#: straight from the manifest — like the Avatar Engine, so a fresh install is
+#: offline-ready and manifest-verified. huggingface_hub only; no pip/ensurepip.
 _KOKORO_PREFETCH = (
-    "import importlib.util\n"
-    "if importlib.util.find_spec('en_core_web_sm') is None:\n"
-    "    if importlib.util.find_spec('pip') is None:\n"
-    "        import ensurepip; ensurepip.bootstrap()\n"
-    "    from spacy.cli import download; download('en_core_web_sm')\n"
-    "import spacy; spacy.load('en_core_web_sm')\n"  # verify it loads
+    "import spacy; spacy.load('en_core_web_sm')\n"  # installed via pip_groups; verify it loads
     "print('kokoro: en_core_web_sm ready')\n"
+    + build_kokoro_prefetch()
 )
 
 INSTALL_SPECS: dict[str, InstallSpec] = {
     "kokoro": InstallSpec(
         model_id="kokoro",
-        pip_groups=(("kokoro>=0.9",) + _PLATFORM_CORE,),
+        pip_groups=(("kokoro>=0.9",) + _PLATFORM_CORE, (_SPACY_EN_MODEL,)),
         verify_imports=("kokoro", "soundfile"),
         # Fetch the English spaCy G2P model so EN audio generates (A3.10).
         prefetch_code=_KOKORO_PREFETCH,

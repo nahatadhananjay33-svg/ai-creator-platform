@@ -17,10 +17,17 @@ from voice_engine.models.install_specs import INSTALL_SPECS
 
 # --------------------------------------------------------------- installer spec
 def test_kokoro_spec_fetches_english_g2p_model():
-    pf = INSTALL_SPECS["kokoro"].prefetch_code
+    spec = INSTALL_SPECS["kokoro"]
+    pf = spec.prefetch_code
     assert pf and "en_core_web_sm" in pf
-    # version-matched download + pip bootstrap for uv's pip-less venvs
-    assert "download(" in pf and "ensurepip" in pf
+    # B2.1: the model is installed as a pinned wheel in pip_groups (uv installs
+    # it into the pip-less venv); the prefetch only *verifies* it loads. No
+    # runtime `spacy download` / pip / ensurepip — uv venvs ship neither.
+    pip_pkgs = " ".join(p for group in spec.pip_groups for p in group)
+    assert "en_core_web_sm" in pip_pkgs and "spacy-models" in pip_pkgs
+    # No runtime pip bootstrap or `spacy download` (only hf_hub_download for weights).
+    assert "ensurepip" not in pf and "spacy.cli" not in pf
+    assert "spacy.load('en_core_web_sm')" in pf
 
 
 def test_model_name_matches_error():

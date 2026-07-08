@@ -1,12 +1,16 @@
 # Voice Engine Installation Guide
 
-> **Kokoro English G2P (A3.10).** Kokoro's English pipeline (misaki) needs
-> spaCy's `en_core_web_sm` model, which is not a pip dependency — without it
-> English synthesis fails with `[E050] Can't find model 'en_core_web_sm'`
-> (only Hindi works). The kokoro installer now fetches it automatically
-> (version-matched via spaCy's downloader; pip is bootstrapped for uv's
-> pip-less venvs), and `generate_scenario_audio.py` verifies/self-heals it
-> before generating. No manual `spacy download` is ever required.
+> **Kokoro English G2P (A3.10, fixed B2.1).** Kokoro's English pipeline
+> (misaki) needs spaCy's `en_core_web_sm` model, which is not a pip dependency —
+> without it English synthesis fails with `[E050] Can't find model
+> 'en_core_web_sm'` (only Hindi works). The kokoro installer now installs it as
+> a **pinned wheel in `pip_groups`** so uv places it in the venv at build time.
+> (B2.1: the previous prefetch ran `spacy download` at runtime, which bootstraps
+> pip via `ensurepip` — but uv venvs ship neither pip nor ensurepip, so it
+> aborted with `ModuleNotFoundError`.) The prefetch then verifies the model
+> loads and pulls the weights from the manifest; `generate_scenario_audio.py`
+> still verifies/self-heals it before generating. No manual `spacy download`. See
+> [`KOKORO.md`](KOKORO.md).
 
 > **GPU note (A3.6, 2026-07-05):** CUDA model installs require an NVIDIA
 > driver **≥ 452.39** (the CUDA 11.8 floor). On older drivers the framework
