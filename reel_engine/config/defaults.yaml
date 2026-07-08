@@ -1,0 +1,26 @@
+# Reels Engine production defaults (Phase C2 walking skeleton).
+#
+# Model selection is configuration, not code (platform convention): change the
+# render backend, resolution, or export set here — or via AICP__section__key env
+# overrides — with no code change. C2 renders solid backgrounds + text overlays
+# only; generative stages arrive in C3+.
+
+render:
+  width: 1080              # base master resolution (9:16 portrait by default)
+  height: 1920
+  fps: 30
+  codec: libx264          # common, universally playable; nvenc is an opt-in later
+  pix_fmt: yuv420p        # max compatibility (requires even dimensions)
+  bitrate: "6M"
+  audio_codec: aac
+  audio_sample_rate: 44100
+  renderer: ffmpeg        # "ffmpeg" (real MP4) | "mock" (hermetic raw-AVI proxy)
+  font_size: 96           # text-overlay size for the ffmpeg drawtext renderer
+  text_color: "#FFFFFF"
+  mock_max_dim: 160       # cap the longest side when the mock proxy downsizes
+
+output_dir: null          # null -> reel_engine/output
+
+export:
+  # Platform/aspect profiles emitted from the master (see exporters/profiles.py).
+  profiles: [reel_9x16, square_1x1, landscape_16x9]

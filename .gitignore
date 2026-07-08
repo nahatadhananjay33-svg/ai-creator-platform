@@ -100,3 +100,4 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+reel_engine/output/
