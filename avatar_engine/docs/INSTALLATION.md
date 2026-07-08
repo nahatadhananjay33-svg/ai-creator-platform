@@ -15,6 +15,19 @@
 > audio-driven like SadTalker (portrait + audio). See
 > [`MUSE_TALK.md`](MUSE_TALK.md).
 
+> **LatentSync (Phase A4.7).** `install_models --models latentsync` clones
+> `bytedance/LatentSync` (torch 2.5.1/cu121, `huggingface_hub==0.30.2`) and
+> downloads ~5.5 GB of weights **from the manifest** (`hf_hub_download` +
+> `snapshot_download` VAE pre-warm, idempotent and hard-validated — not the
+> repo's `setup_env.sh`). Verify with
+> `python -m avatar_engine.scripts.validate_latentsync_weights`, then validate
+> the GPU end-to-end with `python avatar_engine/scripts/smoke_latentsync.py`
+> (exit 0 on success — see
+> [`LATENTSYNC.md`](LATENTSYNC.md#gpu-smoke-test-m4)). It is **video-driven**
+> lip-sync (template video + audio) and **needs a CUDA GPU**. On the T4 it runs
+> fp32 at 256² (upstream disables fp16 on Turing; 512² OOMs 16 GB) — see
+> [`LATENTSYNC.md`](LATENTSYNC.md).
+
 > **LivePortrait weights (Phase A3.9).** The installer now auto-downloads
 > LivePortrait's 8 humans-mode pretrained weights (~660 MB) from HF
 > `KlingTeam/LivePortrait` into `pretrained_weights/` via the spec's
