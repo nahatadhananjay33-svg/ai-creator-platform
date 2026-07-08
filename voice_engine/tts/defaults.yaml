@@ -22,9 +22,27 @@ engine:
     xtts-v2: {}     # CPML license: benchmark baseline only
 
 routing:
+  # Production use-case chains (Phase B2.3). Adapter ids in preference order;
+  # EngineRouter picks the first one that is installed AND satisfies the
+  # request's language/cloning constraints. `mock` is the terminal fallback so
+  # resolution never hard-fails in dev/CI where no heavy model is installed.
+  #
+  # Verdicts are the measured B2.3 benchmark (voice_engine/docs/VOICE_ENGINE.md):
+  #   Kokoro     — CPU-real-time (warm RTF ~0.3 GPU / ~0.5-1.0 CPU), 82M, no
+  #                cloning, branded voice packs, EN+HI. The latency tier.
+  #   Chatterbox — 0.5B GPU cloner (~6.5 GB VRAM, ~3.5 GB measured), zero-shot
+  #                cloning + emotion knob, EN+HI(+Hinglish). The quality tier.
+  #
+  # Named production use cases:
+  phone_agent:        [kokoro, mock]              # low-latency branded voice, CPU-friendly
+  realtime_streaming: [kokoro, mock]              # live agents / WebRTC; chunk-streamed
+  content_creation:   [chatterbox, kokoro, mock]  # reels/YouTube; quality first, kokoro fallback
+  premium_clone:      [chatterbox, mock]          # persona voice clone (needs zero-shot cloning)
+  #
+  # Capability tiers (kept for back-compat; secondary models remain as fallbacks):
   realtime: [kokoro, melotts, mock]
-  quality: [chatterbox, styletts2, kokoro, mock]
-  cloning: [chatterbox, styletts2, f5-tts, mock]
+  quality:  [chatterbox, styletts2, kokoro, mock]
+  cloning:  [chatterbox, styletts2, f5-tts, mock]
 
 cache:
   enabled: true
