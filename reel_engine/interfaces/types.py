@@ -25,9 +25,10 @@ from typing import Any
 
 #: Bumped whenever the serialized Timeline schema changes incompatibly. serde
 #: writes it into every project file; the loader validates/migrates against it.
-#: v2 (Phase C4) added ``Timeline.caption_tracks`` — a purely additive change:
-#: v1 projects still load (they simply have no caption tracks).
-TIMELINE_SCHEMA_VERSION = 2
+#: v2 (Phase C4) added ``Timeline.caption_tracks``; v3 (Phase C5) added
+#: ``Timeline.branding`` — both purely additive: v1/v2 projects still load (they
+#: simply have no caption tracks / no branding).
+TIMELINE_SCHEMA_VERSION = 3
 
 #: RGB colour, 0-255 per channel (the IR is colour-space agnostic; renderers
 #: convert to whatever their pipeline needs — e.g. BGR24 frames).
@@ -329,6 +330,155 @@ class CaptionTrack:
         return tuple(w for s in self.segments for w in s.words)
 
 
+# =========================================================================
+# Branding & Theme (Phase C5) — a native Timeline track, timed in ABSOLUTE reel
+# time. Branding is data, not a renderer special-case: the Branding Engine
+# populates these frozen types (a Theme + typed components) and the renderer
+# lowers them to overlays. Everything stays immutable and additive, so v1/v2
+# timelines are unaffected.
+# =========================================================================
+#: The 9-grid + band anchors a branding element may occupy.
+BRANDING_POSITIONS = (
+    "top_left", "top_center", "top_right",
+    "center_left", "center", "center_right",
+    "bottom_left", "bottom_center", "bottom_right",
+    "bottom",  # full-width lower-third band
+)
+
+
+@dataclass(frozen=True)
+class Theme:
+    """A reusable visual identity. Pure data; the renderer maps it to overlays.
+
+    Colours are RGB triples; margins are fractions of the frame (resolution
+    independent). A Theme supplies the *defaults* every branding component falls
+    back to (logo placement, safe area, card/lower-third look, intro/outro
+    length), so a creator picks a theme and overrides only what they must."""
+
+    name: str = "classic"
+    font_family: str = "DejaVuSans"
+    primary_color: tuple = (24, 119, 242)     # brand colour (lower-third band, accents)
+    secondary_color: tuple = (255, 255, 255)  # contrast / subtitle colour
+    text_color: tuple = (255, 255, 255)       # body text on cards / lower thirds
+    background_color: tuple = (12, 14, 20)    # intro/outro card fill
+    logo_position: str = "top_right"
+    logo_scale: float = 0.14                  # fraction of frame width
+    safe_margin_v: float = 0.06               # safe area kept clear top+bottom
+    safe_margin_h: float = 0.05               # safe area kept clear each side
+    lower_third_position: str = "bottom"
+    lower_third_opacity: float = 0.85
+    watermark_opacity: float = 0.45
+    intro_duration_s: float = 2.0
+    outro_duration_s: float = 2.5
+
+
+@dataclass(frozen=True)
+class Logo:
+    """A logo image placed on the frame. ``source`` is an image asset; when it
+    is absent the renderer draws a text badge from ``text`` (initials/brand)."""
+
+    source: AssetRef | None = None
+    text: str | None = None                   # fallback badge text if no image
+    position: str = "top_right"
+    scale: float = 0.14                       # fraction of frame width
+    opacity: float = 1.0
+    start_s: float | None = None              # None -> from reel start
+    end_s: float | None = None                # None -> to reel end
+
+
+@dataclass(frozen=True)
+class Watermark:
+    """A persistent, low-opacity mark (text or image), usually the whole reel."""
+
+    text: str | None = None
+    source: AssetRef | None = None
+    position: str = "bottom_right"
+    scale: float = 0.10
+    opacity: float = 0.45
+    start_s: float | None = None
+    end_s: float | None = None
+
+
+@dataclass(frozen=True)
+class LowerThird:
+    """A titled banner (name + role/handle) shown over a time window."""
+
+    title: str
+    subtitle: str = ""
+    start_s: float = 0.0
+    end_s: float = 0.0                        # must be > start_s
+    position: str = "bottom"
+    opacity: float = 0.85
+
+
+@dataclass(frozen=True)
+class Intro:
+    """A full-frame opening card shown for ``duration_s`` from reel start."""
+
+    title: str
+    subtitle: str = ""
+    duration_s: float = 2.0
+
+
+@dataclass(frozen=True)
+class Outro:
+    """A full-frame closing card shown for ``duration_s`` at the reel end,
+    optionally listing social handles / a website."""
+
+    title: str
+    subtitle: str = ""
+    duration_s: float = 2.5
+    handles: tuple = ()                       # tuple[str, ...] — handles/website
+
+
+@dataclass(frozen=True)
+class BrandingElement:
+    """A resolved, absolutely-timed branding overlay — the generic op the
+    renderer consumes (a :class:`BrandingTrack` lowers its typed components to
+    these). ``kind`` selects the presentation; unused fields stay defaulted."""
+
+    kind: str                                 # logo|watermark|lower_third|intro|outro
+    start_s: float
+    end_s: float
+    position: str = "center"
+    scale: float = 0.14                       # fraction of frame width (logo/watermark)
+    opacity: float = 1.0
+    text: str | None = None
+    subtitle: str | None = None
+    lines: tuple = ()                         # extra text lines (outro handles)
+    source: AssetRef | None = None            # image asset (logo/watermark)
+    fill_color: tuple = (12, 14, 20)          # card / band fill (RGB)
+    text_color: tuple = (255, 255, 255)
+    font_family: str = "DejaVuSans"
+    full_frame: bool = False                  # intro/outro cover the whole frame
+
+    @property
+    def duration_s(self) -> float:
+        return round(self.end_s - self.start_s, 6)
+
+
+@dataclass(frozen=True)
+class BrandingTrack:
+    """A theme plus its typed branding components — the native branding track.
+
+    All timing is derived at lowering time (intro from reel start, outro from
+    reel end, logo/watermark spanning the reel unless bounded), so the track is
+    resolution- and duration-agnostic until it meets a concrete Timeline."""
+
+    track_id: str = "branding"
+    theme: Theme = field(default_factory=Theme)
+    logo: Logo | None = None
+    watermark: Watermark | None = None
+    intro: Intro | None = None
+    outro: Outro | None = None
+    lower_thirds: tuple = ()                  # tuple[LowerThird, ...]
+
+    @property
+    def has_elements(self) -> bool:
+        return any((self.logo, self.watermark, self.intro, self.outro,
+                    self.lower_thirds))
+
+
 @dataclass(frozen=True)
 class TimelineMeta:
     """Global, render-relevant metadata. Deliberately free of timestamps or any
@@ -357,6 +507,7 @@ class Timeline:
     meta: TimelineMeta = field(default_factory=TimelineMeta)
     scenes: tuple = ()              # tuple[Scene, ...] in play order
     caption_tracks: tuple = ()      # tuple[CaptionTrack, ...] — C4; absolute reel time
+    branding: "BrandingTrack | None" = None   # C5; native branding track (absolute time)
     schema_version: int = TIMELINE_SCHEMA_VERSION
 
     @property
@@ -370,6 +521,10 @@ class Timeline:
     @property
     def has_captions(self) -> bool:
         return any(t.segments for t in self.caption_tracks)
+
+    @property
+    def has_branding(self) -> bool:
+        return self.branding is not None and self.branding.has_elements
 
 
 @dataclass(frozen=True)

@@ -66,9 +66,10 @@ def test_caption_dataclasses_are_immutable_and_derive_durations():
             obj.index = 99   # every caption type is frozen — no in-place mutation
 
 
-def test_schema_version_is_2_and_has_captions():
+def test_schema_version_supports_captions_and_has_captions():
+    from reel_engine.interfaces.types import TIMELINE_SCHEMA_VERSION
     tl = _timeline(_karaoke_track())
-    assert tl.schema_version == 2
+    assert tl.schema_version == TIMELINE_SCHEMA_VERSION >= 2   # captions since v2
     assert tl.has_captions
     assert not Timeline(scenes=(_scene(),)).has_captions
 

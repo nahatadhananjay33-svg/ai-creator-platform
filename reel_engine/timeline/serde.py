@@ -14,16 +14,24 @@ from typing import Any
 from reel_engine.interfaces.types import (
     TIMELINE_SCHEMA_VERSION,
     AssetRef,
+    BrandingElement,
+    BrandingTrack,
     CaptionAnimation,
     CaptionSegment,
     CaptionStyle,
     CaptionTrack,
     Clip,
+    Intro,
+    Logo,
+    LowerThird,
+    Outro,
     Scene,
+    Theme,
     Timeline,
     TimelineMeta,
     Track,
     Transition,
+    Watermark,
     WordTiming,
 )
 
@@ -109,14 +117,68 @@ def _caption_track_to_dict(t: CaptionTrack) -> dict[str, Any]:
     }
 
 
+# ---- branding (C5) ----
+def _theme_to_dict(t: Theme) -> dict[str, Any]:
+    return {
+        "name": t.name, "font_family": t.font_family,
+        "primary_color": list(t.primary_color), "secondary_color": list(t.secondary_color),
+        "text_color": list(t.text_color), "background_color": list(t.background_color),
+        "logo_position": t.logo_position, "logo_scale": t.logo_scale,
+        "safe_margin_v": t.safe_margin_v, "safe_margin_h": t.safe_margin_h,
+        "lower_third_position": t.lower_third_position,
+        "lower_third_opacity": t.lower_third_opacity,
+        "watermark_opacity": t.watermark_opacity,
+        "intro_duration_s": t.intro_duration_s, "outro_duration_s": t.outro_duration_s,
+    }
+
+
+def _logo_to_dict(g: Logo) -> dict[str, Any]:
+    return {"source": _asset_to_dict(g.source), "text": g.text, "position": g.position,
+            "scale": g.scale, "opacity": g.opacity,
+            "start_s": g.start_s, "end_s": g.end_s}
+
+
+def _watermark_to_dict(w: Watermark) -> dict[str, Any]:
+    return {"text": w.text, "source": _asset_to_dict(w.source), "position": w.position,
+            "scale": w.scale, "opacity": w.opacity, "start_s": w.start_s, "end_s": w.end_s}
+
+
+def _lower_third_to_dict(l: LowerThird) -> dict[str, Any]:
+    return {"title": l.title, "subtitle": l.subtitle, "start_s": l.start_s,
+            "end_s": l.end_s, "position": l.position, "opacity": l.opacity}
+
+
+def _intro_to_dict(i: Intro) -> dict[str, Any]:
+    return {"title": i.title, "subtitle": i.subtitle, "duration_s": i.duration_s}
+
+
+def _outro_to_dict(o: Outro) -> dict[str, Any]:
+    return {"title": o.title, "subtitle": o.subtitle, "duration_s": o.duration_s,
+            "handles": list(o.handles)}
+
+
+def _branding_to_dict(b: BrandingTrack) -> dict[str, Any]:
+    return {
+        "track_id": b.track_id, "theme": _theme_to_dict(b.theme),
+        "logo": _logo_to_dict(b.logo) if b.logo else None,
+        "watermark": _watermark_to_dict(b.watermark) if b.watermark else None,
+        "intro": _intro_to_dict(b.intro) if b.intro else None,
+        "outro": _outro_to_dict(b.outro) if b.outro else None,
+        "lower_thirds": [_lower_third_to_dict(l) for l in b.lower_thirds],
+    }
+
+
 def timeline_to_dict(tl: Timeline) -> dict[str, Any]:
     """Plain JSON-able mapping for a Timeline (stable field order)."""
-    return {
+    d = {
         "schema_version": tl.schema_version,
         "meta": _meta_to_dict(tl.meta),
         "scenes": [_scene_to_dict(s) for s in tl.scenes],
         "caption_tracks": [_caption_track_to_dict(t) for t in tl.caption_tracks],
     }
+    if tl.branding is not None:
+        d["branding"] = _branding_to_dict(tl.branding)
+    return d
 
 
 def timeline_to_json(tl: Timeline, *, indent: int | None = 2) -> str:
@@ -216,10 +278,75 @@ def _caption_track_from_dict(d: dict[str, Any]) -> CaptionTrack:
     )
 
 
+# ---- branding (C5) ----
+def _theme_from_dict(d: dict[str, Any] | None) -> Theme:
+    if not d:
+        return Theme()
+    defaults = Theme()
+    tuple_fields = ("primary_color", "secondary_color", "text_color", "background_color")
+    kwargs: dict[str, Any] = {}
+    for f in _theme_to_dict(defaults):
+        if f in d:
+            kwargs[f] = tuple(d[f]) if f in tuple_fields else d[f]
+    return Theme(**kwargs)
+
+
+def _logo_from_dict(d: dict[str, Any] | None) -> Logo | None:
+    if not d:
+        return None
+    return Logo(source=_asset_from_dict(d.get("source")), text=d.get("text"),
+                position=d.get("position", "top_right"), scale=d.get("scale", 0.14),
+                opacity=d.get("opacity", 1.0), start_s=d.get("start_s"),
+                end_s=d.get("end_s"))
+
+
+def _watermark_from_dict(d: dict[str, Any] | None) -> Watermark | None:
+    if not d:
+        return None
+    return Watermark(text=d.get("text"), source=_asset_from_dict(d.get("source")),
+                     position=d.get("position", "bottom_right"), scale=d.get("scale", 0.10),
+                     opacity=d.get("opacity", 0.45), start_s=d.get("start_s"),
+                     end_s=d.get("end_s"))
+
+
+def _lower_third_from_dict(d: dict[str, Any]) -> LowerThird:
+    return LowerThird(title=d["title"], subtitle=d.get("subtitle", ""),
+                      start_s=d.get("start_s", 0.0), end_s=d.get("end_s", 0.0),
+                      position=d.get("position", "bottom"), opacity=d.get("opacity", 0.85))
+
+
+def _intro_from_dict(d: dict[str, Any] | None) -> Intro | None:
+    if not d:
+        return None
+    return Intro(title=d["title"], subtitle=d.get("subtitle", ""),
+                 duration_s=d.get("duration_s", 2.0))
+
+
+def _outro_from_dict(d: dict[str, Any] | None) -> Outro | None:
+    if not d:
+        return None
+    return Outro(title=d["title"], subtitle=d.get("subtitle", ""),
+                 duration_s=d.get("duration_s", 2.5), handles=tuple(d.get("handles", ())))
+
+
+def _branding_from_dict(d: dict[str, Any] | None) -> BrandingTrack | None:
+    if not d:
+        return None
+    return BrandingTrack(
+        track_id=d.get("track_id", "branding"),
+        theme=_theme_from_dict(d.get("theme")),
+        logo=_logo_from_dict(d.get("logo")),
+        watermark=_watermark_from_dict(d.get("watermark")),
+        intro=_intro_from_dict(d.get("intro")),
+        outro=_outro_from_dict(d.get("outro")),
+        lower_thirds=tuple(_lower_third_from_dict(l) for l in d.get("lower_thirds", ())),
+    )
+
+
 def timeline_from_dict(d: dict[str, Any]) -> Timeline:
     """Rebuild a Timeline from a mapping. Rejects unknown future schema
-    versions loudly rather than silently mis-parsing. ``caption_tracks`` is
-    optional so v1 projects (no captions) load unchanged."""
+    versions loudly rather than silently mis-parsing. ``caption_tracks`` and
+    ``branding`` are optional so v1/v2 projects load unchanged."""
     version = d.get("schema_version", TIMELINE_SCHEMA_VERSION)
     if version > TIMELINE_SCHEMA_VERSION:
         raise ValueError(
@@ -231,6 +358,7 @@ def timeline_from_dict(d: dict[str, Any]) -> Timeline:
         scenes=tuple(_scene_from_dict(s) for s in d.get("scenes", ())),
         caption_tracks=tuple(_caption_track_from_dict(t)
                              for t in d.get("caption_tracks", ())),
+        branding=_branding_from_dict(d.get("branding")),
         schema_version=version,
     )
 

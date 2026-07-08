@@ -9,7 +9,12 @@ single :class:`TimelineError`. No renderer, no I/O — pure inspection.
 from __future__ import annotations
 
 from foundation.exceptions import ConfigError
-from reel_engine.interfaces.types import TIMELINE_SCHEMA_VERSION, Clip, Timeline
+from reel_engine.interfaces.types import (
+    BRANDING_POSITIONS,
+    TIMELINE_SCHEMA_VERSION,
+    Clip,
+    Timeline,
+)
 
 
 class TimelineError(ConfigError):
@@ -91,6 +96,11 @@ def validate_timeline(tl: Timeline) -> list[str]:
     caption_ids: set[str] = set()
     for i, track in enumerate(tl.caption_tracks):
         problems.extend(_validate_caption_track(track, i, reel_duration, caption_ids))
+
+    # Branding is a native track timed in ABSOLUTE reel time (C5). Absent on
+    # v1/v2 timelines, which skip this entirely.
+    if tl.branding is not None:
+        problems.extend(_validate_branding(tl.branding, reel_duration))
 
     return problems
 
@@ -178,6 +188,96 @@ def _validate_caption_track(track, index: int, reel_duration: float,
             problems.append(f"{where}: {track.kind} captions require per-word timings")
         problems.extend(_validate_words(seg, where))
         prev_end = seg.end_s
+    return problems
+
+
+def _validate_theme(theme, where: str) -> list[str]:
+    problems: list[str] = []
+    for name in ("primary_color", "secondary_color", "text_color", "background_color"):
+        if not _valid_rgb(getattr(theme, name)):
+            problems.append(f"{where}: theme.{name} is not a valid RGB triple")
+    if theme.logo_position not in BRANDING_POSITIONS:
+        problems.append(f"{where}: theme.logo_position {theme.logo_position!r} not in {BRANDING_POSITIONS}")
+    if not (0.0 < theme.logo_scale <= 1.0):
+        problems.append(f"{where}: theme.logo_scale must be in (0, 1], got {theme.logo_scale}")
+    for m in ("safe_margin_v", "safe_margin_h"):
+        if not (0.0 <= getattr(theme, m) < 0.5):
+            problems.append(f"{where}: theme.{m} must be in [0, 0.5), got {getattr(theme, m)}")
+    for o in ("lower_third_opacity", "watermark_opacity"):
+        if not (0.0 <= getattr(theme, o) <= 1.0):
+            problems.append(f"{where}: theme.{o} must be in [0, 1], got {getattr(theme, o)}")
+    for dfield in ("intro_duration_s", "outro_duration_s"):
+        if getattr(theme, dfield) < 0:
+            problems.append(f"{where}: theme.{dfield} must be non-negative")
+    return problems
+
+
+def _validate_overlay(el, where: str, reel_duration: float) -> list[str]:
+    """Shared checks for logo/watermark: position, scale, opacity, time window."""
+    problems: list[str] = []
+    if el.position not in BRANDING_POSITIONS:
+        problems.append(f"{where}: position {el.position!r} not in {BRANDING_POSITIONS}")
+    if not (0.0 < el.scale <= 1.0):
+        problems.append(f"{where}: scale must be in (0, 1], got {el.scale}")
+    if not (0.0 <= el.opacity <= 1.0):
+        problems.append(f"{where}: opacity must be in [0, 1], got {el.opacity}")
+    if el.source is None and not (el.text and el.text.strip()):
+        problems.append(f"{where}: needs an image source or non-empty text")
+    s = el.start_s if el.start_s is not None else 0.0
+    e = el.end_s if el.end_s is not None else reel_duration
+    if e <= s:
+        problems.append(f"{where}: end_s {e} <= start_s {s}")
+    if s < -_EPS or e > reel_duration + _EPS:
+        problems.append(f"{where}: window [{s}, {e}] outside reel [0, {reel_duration}]")
+    return problems
+
+
+def _validate_branding(track, reel_duration: float) -> list[str]:
+    problems: list[str] = []
+    where0 = f"branding {track.track_id!r}"
+    problems.extend(_validate_theme(track.theme, where0))
+
+    if track.logo is not None:
+        problems.extend(_validate_overlay(track.logo, f"{where0} logo", reel_duration))
+    if track.watermark is not None:
+        problems.extend(_validate_overlay(track.watermark, f"{where0} watermark", reel_duration))
+
+    intro_d = track.intro.duration_s if track.intro else 0.0
+    outro_d = track.outro.duration_s if track.outro else 0.0
+    if track.intro is not None:
+        if not (track.intro.title and track.intro.title.strip()):
+            problems.append(f"{where0} intro: empty title")
+        if intro_d <= 0:
+            problems.append(f"{where0} intro: duration_s must be positive, got {intro_d}")
+        if intro_d > reel_duration + _EPS:
+            problems.append(f"{where0} intro: duration {intro_d} exceeds reel {reel_duration}")
+    if track.outro is not None:
+        if not (track.outro.title and track.outro.title.strip()):
+            problems.append(f"{where0} outro: empty title")
+        if outro_d <= 0:
+            problems.append(f"{where0} outro: duration_s must be positive, got {outro_d}")
+        if outro_d > reel_duration + _EPS:
+            problems.append(f"{where0} outro: duration {outro_d} exceeds reel {reel_duration}")
+    # Intro and outro must not overlap (they bookend the reel).
+    if intro_d + outro_d > reel_duration + _EPS:
+        problems.append(
+            f"{where0}: intro ({intro_d}s) + outro ({outro_d}s) exceed reel "
+            f"duration ({reel_duration}s)")
+
+    for i, lt in enumerate(track.lower_thirds):
+        where = f"{where0} lower_third[{i}]"
+        if not (lt.title and lt.title.strip()):
+            problems.append(f"{where}: empty title")
+        if lt.position not in BRANDING_POSITIONS:
+            problems.append(f"{where}: position {lt.position!r} not in {BRANDING_POSITIONS}")
+        if not (0.0 <= lt.opacity <= 1.0):
+            problems.append(f"{where}: opacity must be in [0, 1], got {lt.opacity}")
+        if lt.end_s <= lt.start_s:
+            problems.append(f"{where}: end_s {lt.end_s} <= start_s {lt.start_s}")
+        if lt.start_s < -_EPS or lt.end_s > reel_duration + _EPS:
+            problems.append(
+                f"{where}: window [{lt.start_s}, {lt.end_s}] outside reel "
+                f"[0, {reel_duration}]")
     return problems
 
 
