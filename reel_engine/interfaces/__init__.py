@@ -8,6 +8,10 @@ from __future__ import annotations
 from reel_engine.interfaces.types import (
     TIMELINE_SCHEMA_VERSION,
     AssetRef,
+    CaptionAnimation,
+    CaptionSegment,
+    CaptionStyle,
+    CaptionTrack,
     Clip,
     ExportOutput,
     RenderRequest,
@@ -17,12 +21,17 @@ from reel_engine.interfaces.types import (
     TimelineMeta,
     Track,
     Transition,
+    WordTiming,
     aspect_ratio_string,
 )
 
 __all__ = [
     "TIMELINE_SCHEMA_VERSION",
     "AssetRef",
+    "CaptionAnimation",
+    "CaptionSegment",
+    "CaptionStyle",
+    "CaptionTrack",
     "Clip",
     "ExportOutput",
     "RenderRequest",
@@ -32,5 +41,6 @@ __all__ = [
     "TimelineMeta",
     "Track",
     "Transition",
+    "WordTiming",
     "aspect_ratio_string",
 ]

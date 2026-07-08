@@ -25,7 +25,9 @@ from typing import Any
 
 #: Bumped whenever the serialized Timeline schema changes incompatibly. serde
 #: writes it into every project file; the loader validates/migrates against it.
-TIMELINE_SCHEMA_VERSION = 1
+#: v2 (Phase C4) added ``Timeline.caption_tracks`` — a purely additive change:
+#: v1 projects still load (they simply have no caption tracks).
+TIMELINE_SCHEMA_VERSION = 2
 
 #: RGB colour, 0-255 per channel (the IR is colour-space agnostic; renderers
 #: convert to whatever their pipeline needs — e.g. BGR24 frames).
@@ -218,6 +220,115 @@ class Scene:
         return cls(scene_id=sid, index=index, duration_s=duration_s, tracks=tuple(tracks))
 
 
+# =========================================================================
+# Captions (Phase C4) — a native Timeline track, timed in ABSOLUTE reel time.
+#
+# Captions are data, not a renderer special-case: the Caption Engine populates
+# these frozen types and the renderer simply lowers a CaptionTrack to overlays.
+# Everything stays immutable and additive, so v1 timelines are unaffected.
+# =========================================================================
+@dataclass(frozen=True)
+class WordTiming:
+    """One word and its absolute time window (for word/karaoke captions)."""
+
+    text: str
+    start_s: float
+    end_s: float
+
+    @property
+    def duration_s(self) -> float:
+        return round(self.end_s - self.start_s, 6)
+
+
+@dataclass(frozen=True)
+class CaptionStyle:
+    """How captions look. Pure data; the renderer maps it to drawtext options.
+
+    Colours are RGB triples (IR convention). ``font_family`` is a logical name
+    the renderer resolves to a font file. Margins are fractions of the frame so
+    a style is resolution-independent."""
+
+    name: str = "classic"
+    font_family: str = "DejaVuSans"
+    font_size: int = 64                    # px at the caption's base resolution
+    primary_color: tuple = (255, 255, 255)  # normal word/segment colour (RGB)
+    highlight_color: tuple = (255, 215, 0)  # karaoke active-word colour (RGB)
+    outline_color: tuple = (0, 0, 0)
+    outline_width: int = 4                 # 0 disables the outline
+    shadow: bool = True
+    shadow_color: tuple = (0, 0, 0)
+    shadow_offset: int = 2                 # px; used when shadow is True
+    box: bool = False                      # draw a background box behind the text
+    box_color: tuple = (0, 0, 0)
+    box_opacity: float = 0.5               # 0..1 (only when box is True)
+    alignment: str = "center"             # "left" | "center" | "right"
+    position: str = "bottom"              # "top" | "center" | "bottom"
+    safe_margin_v: float = 0.12            # fraction of height kept clear top+bottom
+    safe_margin_h: float = 0.06            # fraction of width kept clear each side
+    max_chars_per_line: int = 38
+    uppercase: bool = False
+    bold: bool = False
+
+
+@dataclass(frozen=True)
+class CaptionAnimation:
+    """Simple per-caption animation. C4 keeps it intentionally minimal."""
+
+    kind: str = "none"                     # "none" | "fade" | "pop"
+    duration_s: float = 0.2                # lead-in/out length (seconds)
+
+
+@dataclass(frozen=True)
+class CaptionSegment:
+    """One on-screen caption (a phrase/sentence) over an absolute time window,
+    optionally carrying per-word timings for word/karaoke rendering."""
+
+    segment_id: str
+    index: int
+    text: str
+    start_s: float
+    end_s: float
+    words: tuple = ()                      # tuple[WordTiming, ...]
+
+    @property
+    def duration_s(self) -> float:
+        return round(self.end_s - self.start_s, 6)
+
+    @property
+    def has_word_timings(self) -> bool:
+        return bool(self.words)
+
+
+@dataclass(frozen=True)
+class CaptionTrack:
+    """An ordered set of caption segments plus one shared style + animation.
+
+    ``kind`` selects the presentation the renderer produces:
+      - ``sentence`` — one phrase on screen at a time (segment windows)
+      - ``static``   — all text shown for the whole track (single card)
+      - ``word``     — one word at a time (needs per-word timings)
+      - ``karaoke``  — full phrase shown, words highlighted as spoken
+    """
+
+    track_id: str
+    kind: str = "sentence"                 # "sentence" | "word" | "karaoke" | "static"
+    segments: tuple = ()                   # tuple[CaptionSegment, ...] in play order
+    style: CaptionStyle = field(default_factory=CaptionStyle)
+    animation: CaptionAnimation = field(default_factory=CaptionAnimation)
+
+    @property
+    def n_segments(self) -> int:
+        return len(self.segments)
+
+    @property
+    def duration_s(self) -> float:
+        return round(max((s.end_s for s in self.segments), default=0.0), 6)
+
+    def words(self) -> tuple:
+        """Flatten every segment's word timings in order (empty if none)."""
+        return tuple(w for s in self.segments for w in s.words)
+
+
 @dataclass(frozen=True)
 class TimelineMeta:
     """Global, render-relevant metadata. Deliberately free of timestamps or any
@@ -245,6 +356,7 @@ class Timeline:
 
     meta: TimelineMeta = field(default_factory=TimelineMeta)
     scenes: tuple = ()              # tuple[Scene, ...] in play order
+    caption_tracks: tuple = ()      # tuple[CaptionTrack, ...] — C4; absolute reel time
     schema_version: int = TIMELINE_SCHEMA_VERSION
 
     @property
@@ -254,6 +366,10 @@ class Timeline:
     @property
     def n_scenes(self) -> int:
         return len(self.scenes)
+
+    @property
+    def has_captions(self) -> bool:
+        return any(t.segments for t in self.caption_tracks)
 
 
 @dataclass(frozen=True)

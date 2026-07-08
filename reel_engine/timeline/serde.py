@@ -14,12 +14,17 @@ from typing import Any
 from reel_engine.interfaces.types import (
     TIMELINE_SCHEMA_VERSION,
     AssetRef,
+    CaptionAnimation,
+    CaptionSegment,
+    CaptionStyle,
+    CaptionTrack,
     Clip,
     Scene,
     Timeline,
     TimelineMeta,
     Track,
     Transition,
+    WordTiming,
 )
 
 
@@ -65,12 +70,52 @@ def _meta_to_dict(m: TimelineMeta) -> dict[str, Any]:
             "background_default": list(m.background_default)}
 
 
+# ---- captions (C4) ----
+def _word_to_dict(w: WordTiming) -> dict[str, Any]:
+    return {"text": w.text, "start_s": w.start_s, "end_s": w.end_s}
+
+
+def _caption_style_to_dict(s: CaptionStyle) -> dict[str, Any]:
+    return {
+        "name": s.name, "font_family": s.font_family, "font_size": s.font_size,
+        "primary_color": list(s.primary_color), "highlight_color": list(s.highlight_color),
+        "outline_color": list(s.outline_color), "outline_width": s.outline_width,
+        "shadow": s.shadow, "shadow_color": list(s.shadow_color),
+        "shadow_offset": s.shadow_offset, "box": s.box, "box_color": list(s.box_color),
+        "box_opacity": s.box_opacity, "alignment": s.alignment, "position": s.position,
+        "safe_margin_v": s.safe_margin_v, "safe_margin_h": s.safe_margin_h,
+        "max_chars_per_line": s.max_chars_per_line, "uppercase": s.uppercase, "bold": s.bold,
+    }
+
+
+def _caption_animation_to_dict(a: CaptionAnimation) -> dict[str, Any]:
+    return {"kind": a.kind, "duration_s": a.duration_s}
+
+
+def _caption_segment_to_dict(s: CaptionSegment) -> dict[str, Any]:
+    return {
+        "segment_id": s.segment_id, "index": s.index, "text": s.text,
+        "start_s": s.start_s, "end_s": s.end_s,
+        "words": [_word_to_dict(w) for w in s.words],
+    }
+
+
+def _caption_track_to_dict(t: CaptionTrack) -> dict[str, Any]:
+    return {
+        "track_id": t.track_id, "kind": t.kind,
+        "segments": [_caption_segment_to_dict(s) for s in t.segments],
+        "style": _caption_style_to_dict(t.style),
+        "animation": _caption_animation_to_dict(t.animation),
+    }
+
+
 def timeline_to_dict(tl: Timeline) -> dict[str, Any]:
     """Plain JSON-able mapping for a Timeline (stable field order)."""
     return {
         "schema_version": tl.schema_version,
         "meta": _meta_to_dict(tl.meta),
         "scenes": [_scene_to_dict(s) for s in tl.scenes],
+        "caption_tracks": [_caption_track_to_dict(t) for t in tl.caption_tracks],
     }
 
 
@@ -130,9 +175,51 @@ def _meta_from_dict(d: dict[str, Any]) -> TimelineMeta:
     )
 
 
+# ---- captions (C4) ----
+def _word_from_dict(d: dict[str, Any]) -> WordTiming:
+    return WordTiming(text=d["text"], start_s=d["start_s"], end_s=d["end_s"])
+
+
+def _caption_style_from_dict(d: dict[str, Any] | None) -> CaptionStyle:
+    if not d:
+        return CaptionStyle()
+    defaults = CaptionStyle()
+    tuple_fields = ("primary_color", "highlight_color", "outline_color",
+                    "shadow_color", "box_color")
+    kwargs: dict[str, Any] = {}
+    for f in _caption_style_to_dict(defaults):
+        if f in d:
+            kwargs[f] = tuple(d[f]) if f in tuple_fields else d[f]
+    return CaptionStyle(**kwargs)
+
+
+def _caption_animation_from_dict(d: dict[str, Any] | None) -> CaptionAnimation:
+    if not d:
+        return CaptionAnimation()
+    return CaptionAnimation(kind=d.get("kind", "none"), duration_s=d.get("duration_s", 0.2))
+
+
+def _caption_segment_from_dict(d: dict[str, Any]) -> CaptionSegment:
+    return CaptionSegment(
+        segment_id=d["segment_id"], index=d["index"], text=d["text"],
+        start_s=d["start_s"], end_s=d["end_s"],
+        words=tuple(_word_from_dict(w) for w in d.get("words", ())),
+    )
+
+
+def _caption_track_from_dict(d: dict[str, Any]) -> CaptionTrack:
+    return CaptionTrack(
+        track_id=d["track_id"], kind=d.get("kind", "sentence"),
+        segments=tuple(_caption_segment_from_dict(s) for s in d.get("segments", ())),
+        style=_caption_style_from_dict(d.get("style")),
+        animation=_caption_animation_from_dict(d.get("animation")),
+    )
+
+
 def timeline_from_dict(d: dict[str, Any]) -> Timeline:
     """Rebuild a Timeline from a mapping. Rejects unknown future schema
-    versions loudly rather than silently mis-parsing."""
+    versions loudly rather than silently mis-parsing. ``caption_tracks`` is
+    optional so v1 projects (no captions) load unchanged."""
     version = d.get("schema_version", TIMELINE_SCHEMA_VERSION)
     if version > TIMELINE_SCHEMA_VERSION:
         raise ValueError(
@@ -142,6 +229,8 @@ def timeline_from_dict(d: dict[str, Any]) -> Timeline:
     return Timeline(
         meta=_meta_from_dict(d.get("meta", {})),
         scenes=tuple(_scene_from_dict(s) for s in d.get("scenes", ())),
+        caption_tracks=tuple(_caption_track_from_dict(t)
+                             for t in d.get("caption_tracks", ())),
         schema_version=version,
     )
 

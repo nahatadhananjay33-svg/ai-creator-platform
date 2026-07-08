@@ -85,6 +85,99 @@ def validate_timeline(tl: Timeline) -> list[str]:
             for clip in track.clips:
                 problems.extend(_validate_clip(clip, scene.duration_s, where))
 
+    # Captions are timed in ABSOLUTE reel time; the reel (audio) duration is the
+    # sum of scene durations. Empty caption_tracks (v1 timelines) skip this.
+    reel_duration = tl.duration_s
+    caption_ids: set[str] = set()
+    for i, track in enumerate(tl.caption_tracks):
+        problems.extend(_validate_caption_track(track, i, reel_duration, caption_ids))
+
+    return problems
+
+
+_CAPTION_KINDS = ("sentence", "word", "karaoke", "static")
+_ALIGNMENTS = ("left", "center", "right")
+_POSITIONS = ("top", "center", "bottom")
+_ANIMATIONS = ("none", "fade", "pop")
+_EPS = 1e-6
+
+
+def _validate_caption_style(style, where: str) -> list[str]:
+    problems: list[str] = []
+    if style.alignment not in _ALIGNMENTS:
+        problems.append(f"{where}: style.alignment {style.alignment!r} not in {_ALIGNMENTS}")
+    if style.position not in _POSITIONS:
+        problems.append(f"{where}: style.position {style.position!r} not in {_POSITIONS}")
+    if style.font_size <= 0:
+        problems.append(f"{where}: style.font_size must be positive, got {style.font_size}")
+    for name in ("primary_color", "highlight_color", "outline_color",
+                 "shadow_color", "box_color"):
+        if not _valid_rgb(getattr(style, name)):
+            problems.append(f"{where}: style.{name} is not a valid RGB triple")
+    if not (0.0 <= style.safe_margin_v < 0.5):
+        problems.append(f"{where}: style.safe_margin_v must be in [0, 0.5), got {style.safe_margin_v}")
+    if not (0.0 <= style.safe_margin_h < 0.5):
+        problems.append(f"{where}: style.safe_margin_h must be in [0, 0.5), got {style.safe_margin_h}")
+    if not (0.0 <= style.box_opacity <= 1.0):
+        problems.append(f"{where}: style.box_opacity must be in [0, 1], got {style.box_opacity}")
+    return problems
+
+
+def _validate_words(seg, where: str) -> list[str]:
+    """Word timings must be monotonic and stay inside the segment window."""
+    problems: list[str] = []
+    prev_end = seg.start_s
+    for j, w in enumerate(seg.words):
+        wwhere = f"{where} word[{j}] {w.text!r}"
+        if not (w.text and w.text.strip()):
+            problems.append(f"{wwhere}: empty word text")
+        if w.end_s <= w.start_s:
+            problems.append(f"{wwhere}: end_s <= start_s")
+        if w.start_s < seg.start_s - _EPS or w.end_s > seg.end_s + _EPS:
+            problems.append(
+                f"{wwhere}: [{w.start_s}, {w.end_s}] falls outside its segment "
+                f"[{seg.start_s}, {seg.end_s}]")
+        if w.start_s < prev_end - _EPS:
+            problems.append(f"{wwhere}: overlaps the previous word (start {w.start_s} < {prev_end})")
+        prev_end = w.end_s
+    return problems
+
+
+def _validate_caption_track(track, index: int, reel_duration: float,
+                            seen_ids: set) -> list[str]:
+    problems: list[str] = []
+    where0 = f"caption_track[{index}] {track.track_id!r}"
+    if track.track_id in seen_ids:
+        problems.append(f"{where0}: duplicate caption track_id")
+    seen_ids.add(track.track_id)
+    if track.kind not in _CAPTION_KINDS:
+        problems.append(f"{where0}: kind {track.kind!r} not in {_CAPTION_KINDS}")
+    if track.animation.kind not in _ANIMATIONS:
+        problems.append(f"{where0}: animation.kind {track.animation.kind!r} not in {_ANIMATIONS}")
+    problems.extend(_validate_caption_style(track.style, where0))
+
+    prev_end = 0.0
+    for seg in track.segments:
+        where = f"{where0} segment[{seg.index}] {seg.segment_id!r}"
+        if not (seg.text and seg.text.strip()):
+            problems.append(f"{where}: empty caption text")
+        if seg.end_s <= seg.start_s:
+            problems.append(f"{where}: end_s <= start_s ({seg.start_s}, {seg.end_s})")
+        if seg.start_s < -_EPS:
+            problems.append(f"{where}: negative start_s {seg.start_s}")
+        # Monotonic, non-overlapping in absolute time.
+        if seg.start_s < prev_end - _EPS:
+            problems.append(
+                f"{where}: not monotonic — starts {seg.start_s} before previous end {prev_end}")
+        # Never exceed the audio/reel duration.
+        if seg.end_s > reel_duration + _EPS:
+            problems.append(
+                f"{where}: end_s {seg.end_s} exceeds reel/audio duration {reel_duration}")
+        # word/karaoke need per-word timings; validate any words present.
+        if track.kind in ("word", "karaoke") and not seg.words:
+            problems.append(f"{where}: {track.kind} captions require per-word timings")
+        problems.extend(_validate_words(seg, where))
+        prev_end = seg.end_s
     return problems
 
 
