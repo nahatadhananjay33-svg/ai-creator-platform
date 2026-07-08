@@ -4,11 +4,13 @@ Video-driven lip-sync: re-syncs a **template video**'s mouth to driving audio
 (`driving_video` + `driving_audio` -> `GenerationResult`) — LatentSync is an
 end-to-end audio-conditioned latent-diffusion editor (the accuracy counterpart
 to MuseTalk's real-time inpainting). It is a run-from-clone project: the adapter
-runs the repo's `scripts.inference` (stage2_512) in LatentSync's own venv with a
-sanitized env, then returns the produced mp4.
+runs the repo's `scripts.inference` in LatentSync's own venv with a sanitized
+env, then returns the produced mp4.
 
 Weights are prefetched by the installer (see latentsync_weights.py). LatentSync
-needs a CUDA GPU; on the T4 (compute 7.5) it runs fp32 (fp16 needs cc > 7).
+needs a CUDA GPU; on the T4 (compute 7.5) it runs fp32 (upstream gates fp16 on
+cc > 7), so the default UNet config is 256² (see `_UNET_CONFIG_DEFAULT`) — 512²
+fp32 overflows the T4's 16 GB.
 """
 from __future__ import annotations
 
@@ -25,8 +27,13 @@ from avatar_engine.models.latentsync_weights import check_weights, required_weig
 from avatar_engine.models.media import probe_video
 from avatar_engine.research.catalog import get_profile
 
-#: Upstream inference default (inference.sh): stage2 at 512, 20 steps, DeepCache.
-_UNET_CONFIG = "configs/unet/stage2_512.yaml"
+#: UNet config (relative to the repo). Upstream's stage2_512 (512²) overflows a
+#: T4's 16 GB in fp32 — and LatentSync forces fp32 on Turing: inference.py gates
+#: fp16 on ``get_device_capability()[0] > 7``, which is False for the T4 (cc 7.5).
+#: So the default is upstream's 256² ``stage2_efficient`` config (same 1.6 UNet:
+#: cross_attention_dim 384, sample_size 64), whose ¼-size activations fit the T4.
+#: Override via ``config["unet_config"]`` to run 512 on a larger, fp16-capable GPU.
+_UNET_CONFIG_DEFAULT = "configs/unet/stage2_efficient.yaml"
 _UNET_CKPT = "checkpoints/latentsync_unet.pt"
 
 
@@ -43,11 +50,16 @@ class LatentSyncAdapter(BaseAvatarAdapter):
     def repo_dir(self) -> Path:
         return Path(self.config.get("repo_dir", REPOS_DIR / "latentsync"))
 
+    @property
+    def unet_config(self) -> str:
+        """UNet config path (relative to repo_dir); see ``_UNET_CONFIG_DEFAULT``."""
+        return self.config.get("unet_config", _UNET_CONFIG_DEFAULT)
+
     def required_paths(self) -> list[Path]:
         # Repo inference entrypoint + UNet config + every inference weight, so a
         # missing checkpoint is named precisely rather than a bare directory.
         return [self.repo_dir / "scripts" / "inference.py",
-                self.repo_dir / _UNET_CONFIG,
+                self.repo_dir / self.unet_config,
                 *required_weight_paths(self.repo_dir)]
 
     def weight_report(self) -> list[dict]:
@@ -56,10 +68,11 @@ class LatentSyncAdapter(BaseAvatarAdapter):
 
     def inference_command(self, video_path: Path, audio_path: Path,
                           out_path: Path) -> list[str]:
-        """The exact upstream stage2_512 inference command (from inference.sh)."""
+        """The upstream stage2 inference command (from inference.sh), pointed at
+        ``self.unet_config`` (256² ``stage2_efficient`` by default — see it)."""
         return [
             str(self.venv_python), "-m", "scripts.inference",
-            "--unet_config_path", _UNET_CONFIG,
+            "--unet_config_path", self.unet_config,
             "--inference_ckpt_path", _UNET_CKPT,
             "--inference_steps", str(int(self.config.get("inference_steps", 20))),
             "--guidance_scale", str(float(self.config.get("guidance_scale", 1.5))),
@@ -108,7 +121,7 @@ class LatentSyncAdapter(BaseAvatarAdapter):
             duration_s=probe.duration_s, fps=probe.fps, width=probe.width,
             height=probe.height,
             metadata={
-                "mode": "stage2_512",
+                "mode": Path(self.unet_config).stem,
                 "frames": probe.frame_count,
                 "device_requested": self.device.value,
                 "device_actual": self.actual_device,

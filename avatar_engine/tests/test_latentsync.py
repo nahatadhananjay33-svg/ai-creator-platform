@@ -152,7 +152,8 @@ def test_required_paths_include_weights_config_and_entrypoint(tmp_path):
     a = LatentSyncAdapter(config={"repo_dir": repo})
     req = {str(p) for p in a.required_paths()}
     assert str(repo / "scripts" / "inference.py") in req
-    assert str(repo / "configs" / "unet" / "stage2_512.yaml") in req
+    # Default is the 256² efficient config (512²/fp32 OOMs the T4); see adapter.
+    assert str(repo / "configs" / "unet" / "stage2_efficient.yaml") in req
     assert str(lw.weights_root(repo) / "latentsync_unet.pt") in req
 
 
@@ -169,11 +170,22 @@ def test_inference_command_is_upstream_stage2(tmp_path):
     a = LatentSyncAdapter(config={"repo_dir": tmp_path})
     cmd = a.inference_command(tmp_path / "v.mp4", tmp_path / "a.wav", tmp_path / "out.mp4")
     assert cmd[1:3] == ["-m", "scripts.inference"]
-    assert "configs/unet/stage2_512.yaml" in cmd
+    # Default UNet config is the 256² efficient one so the benchmark fits the T4.
+    assert "configs/unet/stage2_efficient.yaml" in cmd
     assert "checkpoints/latentsync_unet.pt" in cmd
     assert "--enable_deepcache" in cmd
     assert cmd[cmd.index("--video_path") + 1] == str(tmp_path / "v.mp4")
     assert cmd[cmd.index("--video_out_path") + 1] == str(tmp_path / "out.mp4")
+
+
+def test_unet_config_overridable_for_larger_gpus(tmp_path):
+    # An fp16-capable GPU (cc > 7) can run the full 512² config via config override.
+    a = LatentSyncAdapter(config={"repo_dir": tmp_path,
+                                  "unet_config": "configs/unet/stage2_512.yaml"})
+    cmd = a.inference_command(tmp_path / "v.mp4", tmp_path / "a.wav", tmp_path / "o.mp4")
+    assert cmd[cmd.index("--unet_config_path") + 1] == "configs/unet/stage2_512.yaml"
+    assert str(tmp_path / "configs" / "unet" / "stage2_512.yaml") in \
+        {str(p) for p in a.required_paths()}
 
 
 def test_inference_steps_configurable(tmp_path):
