@@ -1,0 +1,48 @@
+# Branding & Theme Engine defaults (Phase C5).
+#
+# Configuration, not code: pick a theme, provide brand facts (creator/channel/
+# website/handles), point at a logo, and toggle which components appear — all
+# via AICP__branding__* env overrides or a user config file, with no code change.
+# Colours are RGB triples. `theme` field overrides win over the chosen preset.
+
+branding:
+  theme: classic          # classic|minimal|corporate|modern|real_estate|finance|education|medical|dark|light
+
+  # Brand facts (the content that fills the components).
+  creator: "Creator Name"
+  channel: "My Channel"
+  website: "example.com"
+  social: ["@mychannel"]  # social handles; first is used for the watermark/intro subtitle
+
+  logo: null              # path to a logo image (PNG w/ alpha); null -> text badge from initials
+
+  # Theme overrides (any subset; applied on top of the preset).
+  font_family: null
+  primary_color: null     # e.g. [24, 119, 242]
+  secondary_color: null
+  watermark_opacity: null
+  safe_margin_v: null
+  safe_margin_h: null
+
+  # Which branding components to include.
+  components:
+    intro: true
+    outro: true
+    logo: true
+    watermark: true
+    lower_third: true
+
+  # Per-component text/timing overrides (null -> derived from brand facts / theme).
+  intro:
+    title: null           # default: channel
+    subtitle: null        # default: first handle / website
+    duration_s: null      # default: theme.intro_duration_s
+  outro:
+    title: null           # default: "Thanks for watching"
+    subtitle: null        # default: "Follow <channel>"
+    duration_s: null      # default: theme.outro_duration_s
+  lower_third:
+    title: null           # default: creator
+    subtitle: null        # default: channel / first handle
+    start_s: 1.0
+    duration_s: 3.0
