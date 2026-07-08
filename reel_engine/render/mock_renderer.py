@@ -26,6 +26,7 @@ from reel_engine.interfaces.types import (
     Scene,
 )
 from reel_engine.render.base import TimelineRenderer, proxy_dimensions, scene_frame_count
+from reel_engine.render.captions import CaptionDraw, caption_alpha, lower_caption_tracks
 from reel_engine.render.colors import rgb_to_bgr_bytes, rgb_tuple
 from reel_engine.timeline.hashing import timeline_content_hash
 from reel_engine.timeline.validate import validate_or_raise
@@ -90,19 +91,112 @@ class MockRenderer(TimelineRenderer):
         return path
 
     def _write_captions(self, path: Path, timeline) -> Path:
+        """SRT sidecar. Prefers the native caption track (C4); falls back to
+        per-scene text (C2 timelines with no caption tracks)."""
         lines: list[str] = []
-        t0 = 0.0
-        idx = 1
-        for scene in timeline.scenes:
-            texts = scene.text_clips()
-            if texts and texts[0].text:
+        if timeline.caption_tracks:
+            for idx, seg in enumerate(timeline.caption_tracks[0].segments, start=1):
                 lines += [str(idx),
-                          f"{_srt_timestamp(t0)} --> {_srt_timestamp(t0 + scene.duration_s)}",
-                          texts[0].text, ""]
-                idx += 1
-            t0 += scene.duration_s
+                          f"{_srt_timestamp(seg.start_s)} --> {_srt_timestamp(seg.end_s)}",
+                          seg.text, ""]
+        else:
+            t0 = 0.0
+            idx = 1
+            for scene in timeline.scenes:
+                texts = scene.text_clips()
+                if texts and texts[0].text:
+                    lines += [str(idx),
+                              f"{_srt_timestamp(t0)} --> {_srt_timestamp(t0 + scene.duration_s)}",
+                              texts[0].text, ""]
+                    idx += 1
+                t0 += scene.duration_s
         path.write_text("\n".join(lines), encoding="utf-8")
         return path
+
+    # ---------------------------------------------------------- captions (C4)
+    def _caption_box(self, draw: CaptionDraw, w: int, h: int) -> tuple:
+        """Deterministic (x0, x1, y0, y1) band for a caption on the proxy frame.
+
+        The mock has no font engine, so a caption is a solid band placed by the
+        style's position/alignment/safe margins and sized from the text length —
+        enough for hermetic tests to assert *where*, *when*, and *what colour* a
+        caption is, matching what FFmpeg's drawtext lowers to."""
+        st = draw.style
+        line_h = max(1, h // 10)
+        block_h = draw.line_count * line_h
+        if st.position == "bottom":
+            block_top = int(h * (1 - st.safe_margin_v)) - block_h
+        elif st.position == "top":
+            block_top = int(h * st.safe_margin_v)
+        else:
+            block_top = (h - block_h) // 2
+        y0 = block_top + draw.line_index * line_h
+        y1 = y0 + line_h
+
+        denom = st.max_chars_per_line or 40
+        frac = min(1.0, max(1, len(draw.text)) / denom)
+        band_w = max(2, int(frac * w * 0.8))
+        if draw.x_frac is not None:
+            cx = draw.x_frac * w
+        elif st.alignment == "left":
+            cx = w * st.safe_margin_h + band_w / 2
+        elif st.alignment == "right":
+            cx = w - w * st.safe_margin_h - band_w / 2
+        else:
+            cx = w / 2.0
+        x0 = int(cx - band_w / 2)
+        x1 = x0 + band_w
+        x0 = max(0, min(x0, w - 1))
+        x1 = max(x0 + 1, min(x1, w))
+        y0 = max(0, min(y0, h - 1))
+        y1 = max(y0 + 1, min(y1, h))
+        return x0, x1, y0, y1
+
+    def _paint_captions(self, base: bytes, w: int, h: int, active: list) -> bytes:
+        """Paint the active caption bands onto a copy of ``base`` (BGR24)."""
+        frame = bytearray(base)
+        for draw, alpha in sorted(active, key=lambda da: da[0].layer):
+            x0, x1, y0, y1 = self._caption_box(draw, w, h)
+            bgr = rgb_to_bgr_bytes(draw.color)
+            for y in range(y0, y1):
+                row = y * w * 3
+                for x in range(x0, x1):
+                    o = row + x * 3
+                    if alpha >= 0.999:
+                        frame[o:o + 3] = bgr
+                    else:
+                        for k in range(3):
+                            frame[o + k] = int(round(frame[o + k] * (1 - alpha)
+                                                     + bgr[k] * alpha))
+        return bytes(frame)
+
+    def _overlay_captions(self, base_frames: list, w: int, h: int, fps: int,
+                          timeline) -> list:
+        """Return a frame list with caption tracks overlaid at absolute time.
+
+        Frames with no active caption pass through untouched; painted frames are
+        cached by (base-frame identity, active draws + rounded alpha) so the pass
+        stays fast and byte-for-byte deterministic."""
+        draws = lower_caption_tracks(timeline)
+        if not draws:
+            return base_frames
+        out: list = []
+        cache: dict = {}
+        for idx, base in enumerate(base_frames):
+            t = idx / fps
+            active = [(d, caption_alpha(d.animation, d.start_s, d.end_s, t))
+                      for d in draws if d.start_s - 1e-9 <= t <= d.end_s + 1e-9]
+            active = [(d, a) for d, a in active if a > 0.01]
+            if not active:
+                out.append(base)
+                continue
+            sig = (id(base), tuple((id(d), round(a, 3)) for d, a in active))
+            painted = cache.get(sig)
+            if painted is None:
+                painted = self._paint_captions(base, w, h, active)
+                cache[sig] = painted
+            out.append(painted)
+        return out
 
     def render(self, request: RenderRequest) -> RenderResult:
         tl = validate_or_raise(request.timeline)
@@ -115,9 +209,12 @@ class MockRenderer(TimelineRenderer):
             # Build per-scene unique frames once, then repeat by frame count.
             per_scene = [(self._scene_frame(s, w, h), scene_frame_count(s.duration_s, fps))
                          for s in tl.scenes]
-            frames: list[bytes] = []
+            base_frames: list[bytes] = []
             for frame, count in per_scene:
-                frames.extend([frame] * count)
+                base_frames.extend([frame] * count)
+            # Captions are a native Timeline track: overlay them in absolute reel
+            # time (no-op when the timeline has no caption tracks).
+            frames = self._overlay_captions(base_frames, w, h, fps, tl)
             write_raw_avi(out, VideoFrames(frames=frames, width=w, height=h, fps=float(fps)))
 
             audio_path = self._write_silent_audio(out.with_suffix(".wav"), tl.duration_s)
@@ -134,6 +231,8 @@ class MockRenderer(TimelineRenderer):
                         scaled_cache[i] = self._scale_pad(frame, w, h, name)
                     sframe, ew, eh, prof = scaled_cache[i]
                     ex_frames.extend([sframe] * count)
+                # Exports inherit captions too (parity with the FFmpeg backend).
+                ex_frames = self._overlay_captions(ex_frames, ew, eh, fps, tl)
                 ex_path = out.with_name(f"{out.stem}__{name}{out.suffix}")
                 write_raw_avi(ex_path, VideoFrames(ex_frames, ew, eh, float(fps)))
                 exports.append(ExportOutput(profile=name, path=ex_path,

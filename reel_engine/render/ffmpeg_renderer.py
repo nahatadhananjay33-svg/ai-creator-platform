@@ -23,6 +23,11 @@ from foundation.shared_utils.ffmpeg import ensure_ffmpeg_on_path
 from reel_engine.exporters.profiles import get_profile
 from reel_engine.interfaces.types import ExportOutput, RenderRequest, RenderResult, Scene
 from reel_engine.render.base import TimelineRenderer
+from reel_engine.render.captions import (
+    LINE_HEIGHT_FACTOR,
+    CaptionDraw,
+    lower_caption_tracks,
+)
 from reel_engine.render.colors import rgb_to_hex
 from reel_engine.render.probe import probe_media
 from reel_engine.timeline.hashing import timeline_content_hash
@@ -141,6 +146,96 @@ class FFmpegRenderer(TimelineRenderer):
         ]
         self._run(args)
 
+    # ---------------------------------------------------------- captions (C4)
+    def _alpha_expr(self, draw: CaptionDraw) -> str | None:
+        """A drawtext ``alpha`` expression for the caption's animation, or None
+        (fully opaque). v1 animation is opacity-only — see CAPTION_ENGINE.md."""
+        a = draw.animation
+        if a.kind == "none":
+            return None
+        s, e = draw.start_s, draw.end_s
+        window = e - s
+        d = min(max(a.duration_s, 0.0), window / 2.0 if window > 0 else 0.0)
+        if d <= 0:
+            return None
+        if a.kind == "pop":                       # fast ramp-in, then hold
+            return f"if(lt(t,{s + d:.4f}),(t-{s:.4f})/{d:.4f},1)"
+        return (                                   # fade: ramp in and out
+            f"if(lt(t,{s + d:.4f}),(t-{s:.4f})/{d:.4f},"
+            f"if(gt(t,{e - d:.4f}),({e:.4f}-t)/{d:.4f},1))"
+        )
+
+    def _drawtext(self, draw: CaptionDraw) -> str:
+        """Lower one :class:`CaptionDraw` to a single ``drawtext`` filter.
+
+        Positions use ``h``/``w``/``text_w`` so the same expressions are correct
+        at any resolution; commas inside expressions are protected by single
+        quotes so the filtergraph parser keeps them intact."""
+        st = draw.style
+        line_h = st.font_size * LINE_HEIGHT_FACTOR
+        block_h = draw.line_count * line_h
+        off = draw.line_index * line_h
+        mv, mh = st.safe_margin_v, st.safe_margin_h
+        if st.position == "bottom":
+            y = f"h*{1 - mv:.4f}-{block_h:.2f}+{off:.2f}"
+        elif st.position == "top":
+            y = f"h*{mv:.4f}+{off:.2f}"
+        else:
+            y = f"(h-{block_h:.2f})/2+{off:.2f}"
+        if draw.x_frac is not None:                # karaoke: explicit centre
+            x = f"{draw.x_frac:.5f}*w-text_w/2"
+        elif st.alignment == "left":
+            x = f"w*{mh:.4f}"
+        elif st.alignment == "right":
+            x = f"w-text_w-w*{mh:.4f}"
+        else:
+            x = "(w-text_w)/2"
+
+        parts = [
+            f"drawtext=fontfile='{self._font}'",
+            f"text='{_escape_drawtext(draw.text)}'",
+            f"fontcolor={rgb_to_hex(draw.color)}",
+            f"fontsize={st.font_size}",
+            f"x={x}", f"y={y}",
+        ]
+        if st.outline_width > 0:
+            parts += [f"borderw={st.outline_width}",
+                      f"bordercolor={rgb_to_hex(st.outline_color)}"]
+        if st.shadow:
+            parts += [f"shadowx={st.shadow_offset}", f"shadowy={st.shadow_offset}",
+                      f"shadowcolor={rgb_to_hex(st.shadow_color)}"]
+        if st.box:
+            parts += ["box=1",
+                      f"boxcolor={rgb_to_hex(st.box_color)}@{st.box_opacity}",
+                      "boxborderw=16"]
+        alpha = self._alpha_expr(draw)
+        if alpha:
+            parts.append(f"alpha='{alpha}'")
+        parts.append(f"enable='between(t,{draw.start_s:.4f},{draw.end_s:.4f})'")
+        return ":".join(parts)
+
+    def _apply_captions(self, master: Path, tl) -> bool:
+        """Burn every caption track into ``master`` in one drawtext pass.
+
+        No-op when the timeline has no caption tracks. Returns whether captions
+        were drawn (False if there is nothing to draw or no font is available)."""
+        if not tl.caption_tracks:
+            return False
+        if self._font is None:
+            logger.warning("No font found; caption tracks NOT burned in",
+                           extra={"context": {"title": tl.meta.title}})
+            return False
+        draws = lower_caption_tracks(tl)
+        if not draws:
+            return False
+        vf = ",".join(self._drawtext(d) for d in draws)
+        r = self.config.render
+        tmp = master.with_name(f"{master.stem}__cap{master.suffix}")
+        self._run(["-i", str(master), "-vf", vf, "-c:v", r.codec, "-pix_fmt", r.pix_fmt,
+                   "-b:v", r.bitrate, "-c:a", "copy", str(tmp)])
+        tmp.replace(master)
+        return True
+
     def _concat(self, scene_files: list[Path], out: Path, work: Path) -> None:
         listfile = work / "concat.txt"
         listfile.write_text("".join(f"file '{p.resolve()}'\n" for p in scene_files),
@@ -187,6 +282,9 @@ class FFmpegRenderer(TimelineRenderer):
                 self._render_scene(scene, tl.meta, sf)
                 scene_files.append(sf)
             self._concat(scene_files, out, work)
+            # Captions are a native Timeline track: burn them into the master
+            # BEFORE export so every aspect profile inherits them.
+            captions_drawn = self._apply_captions(out, tl)
 
             exports = list(self.export_master(out, request.export_profiles))
 
@@ -206,5 +304,6 @@ class FFmpegRenderer(TimelineRenderer):
             render_time_s=round(sw.elapsed_s, 4), timeline_hash=timeline_content_hash(tl),
             exports=tuple(exports),
             metadata={"has_text": self._font is not None, "font": self._font,
+                      "captions": captions_drawn,
                       "base_resolution": [tl.meta.width, tl.meta.height]},
         )
