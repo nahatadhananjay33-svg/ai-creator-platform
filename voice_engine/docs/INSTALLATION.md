@@ -12,6 +12,16 @@
 > still verifies/self-heals it before generating. No manual `spacy download`. See
 > [`KOKORO.md`](KOKORO.md).
 
+> **Chatterbox GPU hardening (B2.2).** Chatterbox is the cloning/quality tier.
+> The installer pins `torch==2.6.0` / `torchaudio==2.6.0` (chatterbox-tts 0.1.7's
+> exact `requires_dist`) via the GPU-aware **cu124** index — the Tesla T4 (`sm_75`)
+> runs those wheels — and prefetches the 6 weight files
+> `ChatterboxMultilingualTTS.from_pretrained` needs (~3.2 GB from
+> `ResembleAI/chatterbox`) straight from a manifest (huggingface_hub only; no
+> pip/ensurepip). Validate with
+> `validate_chatterbox_weights` + the GPU `smoke_chatterbox.py`. See
+> [`CHATTERBOX.md`](CHATTERBOX.md).
+
 > **GPU note (A3.6, 2026-07-05):** CUDA model installs require an NVIDIA
 > driver **≥ 452.39** (the CUDA 11.8 floor). On older drivers the framework
 > reports `CUDA usable: no` and every GPU-class model resolves to `mode:
@@ -55,7 +65,7 @@ actually verified on native Windows (CPU, Python 3.12 venvs via uv).
 | `kokoro` | ✅ installed + validated (EN, HI) | ● Easy | run inside activated venv (its G2P shells out to uv) |
 | `f5-tts` | ✅ installed + validated (EN cloning) | ●● Moderate | `pyarrow==21.0.0` (24.0 DLL crash); FFmpeg shared libs for torchcodec |
 | `xtts-v2` | ✅ installed + validated (EN+HI cloning) | ●● Moderate | `transformers==4.57.1` + `torchcodec`; `COQUI_TOS_AGREED=1` |
-| `chatterbox` | ✅ installed + validated (EN+HI cloning) | ●● Moderate | write PCM_16 via soundfile (torch 2.9 saves float32) |
+| `chatterbox` | ✅ GPU-hardened on T4 (B2.2; EN+HI cloning) | ●● Moderate | `torch==2.6.0`/`cu124` (sm_75 T4); manifest weights (~3.2 GB); PCM_16 via soundfile; see [`CHATTERBOX.md`](CHATTERBOX.md) |
 | `styletts2` | ✅ installed + validated (EN cloning) | ●●● Fiddly | `torch==2.5.1` (weights_only pickle), nltk punkt_tab, `PYTHONUTF8=1` |
 | `melotts` | ✅ installed + validated (EN) | ●●● Fiddly | py3.10 venv (tokenizers 0.13.3 has no cp312 wheel), unidic download, nltk taggers |
 | `indic-parler` | ⚠️ installed; **weights gated** | ●● Moderate | `numba>=0.60` pin; requires HF account acceptance + `HF_TOKEN` |

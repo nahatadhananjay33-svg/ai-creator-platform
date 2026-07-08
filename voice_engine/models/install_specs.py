@@ -34,6 +34,21 @@ _SPACY_EN_MODEL = (
     "en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 )
 
+#: Chatterbox prefetch. Two runtime downloads happen on first model load that
+#: must be pulled at install time so the install is offline-ready (the LatentSync
+#: rule — no hidden runtime downloads):
+#:  1) spacy-pkuseg's Chinese segmentation model (``spacy_ontonotes``, ~34 MB)
+#:     which the multilingual tokenizer fetches from a GitHub release into
+#:     ``~/.pkuseg`` the first time ``pkuseg()`` is instantiated (verified in the
+#:     B2.2 smoke run). Instantiating it here triggers the same fetch now.
+#:  2) every HF weight in the manifest (idempotent, hard-validated).
+#: No pip/ensurepip — both use the packages already in the venv.
+_CHATTERBOX_PREFETCH = (
+    "from spacy_pkuseg import pkuseg; pkuseg()\n"  # downloads spacy_ontonotes if absent
+    "print('chatterbox: pkuseg spacy_ontonotes ready')\n"
+    + build_chatterbox_prefetch()
+)
+
 #: Prefetch: verify the (pip-installed) G2P model loads, then pull every weight
 #: straight from the manifest — like the Avatar Engine, so a fresh install is
 #: offline-ready and manifest-verified. huggingface_hub only; no pip/ensurepip.
@@ -93,10 +108,10 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         torch_cuda_index="https://download.pytorch.org/whl/cu124",
         pip_groups=(("chatterbox-tts",) + _PLATFORM_CORE,),
         verify_imports=("chatterbox", "soundfile"),
-        # Prefetch every weight straight from the manifest (offline-ready,
-        # hard-validated) instead of relying on the adapter's lazy first-use
-        # snapshot_download. huggingface_hub only; no pip/ensurepip.
-        prefetch_code=build_chatterbox_prefetch(),
+        # Prefetch every weight straight from the manifest + the pkuseg
+        # segmentation model (offline-ready, hard-validated) instead of relying
+        # on the adapter's lazy first-use downloads. No pip/ensurepip.
+        prefetch_code=_CHATTERBOX_PREFETCH,
         approx_download_gb=4.5,
         platform_notes="GPU strongly recommended (~6.5 GB VRAM fp16, fits the 15 GB T4); "
         "CPU inference is far from real time. Weights (t3_mtl23ls_v2 + s3gen + ve + "
