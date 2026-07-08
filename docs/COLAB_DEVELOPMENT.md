@@ -19,6 +19,37 @@ upload that file to a fresh runtime (it must exist before the clone).
 
 ---
 
+## 0. Tunnel modes — pick your transport
+
+Set the **`TUNNEL_MODE`** Colab Secret (or env var). Default is `quick`. This is the lever
+for the "constant timeouts" problem — `quick` is convenient but flaky; `named` and `vscode`
+are stable.
+
+| Mode | Stability | Setup | How you connect |
+|---|---|---|---|
+| `quick` (default) | low — new random hostname each runtime, quick tunnels drop | none | Remote-SSH `colab`, paste the printed PowerShell line each time |
+| `named` | high — **fixed** hostname, production Cloudflare tunnel | one-time Cloudflare setup (below) | Remote-SSH `colab`, set `HostName` **once** — never changes |
+| `vscode` | high — Microsoft-hosted, no hostname at all | one-time GitHub device login per runtime | **Remote-Tunnels: Connect to Tunnel…** (no SSH, no PowerShell) |
+
+**`named` (stable Cloudflare tunnel) — one-time setup.** Requires a Cloudflare account with a
+domain on Cloudflare. In the Zero Trust dashboard → Networks → Tunnels → *Create a tunnel*
+(Cloudflared), name it, copy the **token**, and add a **Public Hostname** route (e.g.
+`colab.yourdomain.com`) with service **SSH → `localhost:2222`**. Then add two Colab Secrets:
+`CF_TUNNEL_TOKEN` = the token, `CF_TUNNEL_HOSTNAME` = `colab.yourdomain.com`, and set
+`TUNNEL_MODE=named`. Your `~/.ssh/config` `HostName` is that domain **forever** — no more
+per-session updates.
+
+**`vscode` (VS Code Tunnels) — no account setup.** Set `TUNNEL_MODE=vscode`. The cell prints
+a `https://github.com/login/device` URL + code; authorize once (per runtime). Then in VS Code:
+Command Palette → *Remote-Tunnels: Connect to Tunnel…* → `colab-dev` (override the name with
+the `VSCODE_TUNNEL_NAME` secret). No cloudflared, no SSH config, no hostname to chase. This is
+the least-fuss way to end the timeouts if you don't have a Cloudflare domain.
+
+Under every mode you still get `dev` / `checkpoint` / `recover` and the watchdog (which is
+transport-agnostic — it restarts whatever tunnel you chose).
+
+---
+
 ## 1. Normal startup
 
 1. Start a fresh Colab runtime, upload/open **`colab_bootstrap.ipynb`**, run the one cell.
