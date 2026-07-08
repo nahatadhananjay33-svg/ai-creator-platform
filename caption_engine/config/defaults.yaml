@@ -1,0 +1,29 @@
+# Caption Engine defaults (Phase C4).
+#
+# Configuration, not code: change the caption type, style preset, animation, and
+# any style field here — or via AICP__captions__* env overrides — with no code
+# change. Colours are RGB triples. `style` values override the chosen `preset`.
+
+captions:
+  kind: sentence          # sentence | word | karaoke | static
+  preset: classic         # base style: classic|modern|bold|minimal|youtube|instagram|tiktok
+
+  animation:
+    kind: none            # none | fade | pop
+    duration_s: 0.2       # lead-in/out length (seconds)
+
+  # Style overrides applied on top of the preset (any subset of CaptionStyle).
+  style:
+    font_family: DejaVuSans
+    font_size: 64
+    primary_color: [255, 255, 255]
+    highlight_color: [255, 215, 0]     # karaoke active-word colour
+    outline_color: [0, 0, 0]
+    outline_width: 4                    # stroke; 0 disables
+    shadow: true
+    shadow_offset: 2
+    alignment: center                   # left | center | right
+    position: bottom                    # top | center | bottom
+    safe_margin_v: 0.12                 # fraction of height kept clear (safe area)
+    safe_margin_h: 0.06                 # fraction of width kept clear each side
+    max_chars_per_line: 38
