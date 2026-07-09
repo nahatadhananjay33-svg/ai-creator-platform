@@ -9,5 +9,13 @@ from __future__ import annotations
 from asset_engine.benchmark.cases import AssetBenchmarkCase
 from asset_engine.benchmark.config import AssetBenchmarkConfig
 from asset_engine.benchmark.orchestrator import AssetBenchmark, summarize
+from asset_engine.benchmark.resolver import (
+    ResolverBenchmark,
+    ResolverBenchmarkCase,
+    ResolverBenchmarkConfig,
+)
 
-__all__ = ["AssetBenchmark", "AssetBenchmarkConfig", "AssetBenchmarkCase", "summarize"]
+__all__ = [
+    "AssetBenchmark", "AssetBenchmarkConfig", "AssetBenchmarkCase", "summarize",
+    "ResolverBenchmark", "ResolverBenchmarkConfig", "ResolverBenchmarkCase",
+]
