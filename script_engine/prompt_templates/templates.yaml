@@ -1,0 +1,143 @@
+# Prompt templates (Phase C10) — configuration-driven, one per content vertical.
+#
+# Each template supplies:
+#   audience / tone     : framing carried onto the AIStoryboard
+#   system_prompt       : the instruction a REAL LLM provider is given
+#   arc                 : the advisory scene-type sequence (hook ... call_to_action)
+#   hook / cta / body   : deterministic narration templates the MockProvider fills
+#                         with the prompt's {topic}. Body lines carry keyword
+#                         triggers (percent, compared to, here are ...) so the
+#                         deterministic Scene Engine classifies a varied reel.
+#
+# Adding a vertical is a YAML edit — no code change. Every template emits the SAME
+# AIStoryboard shape, so all providers stay interchangeable.
+
+templates:
+  general:
+    audience: a general audience
+    tone: informative
+    system_prompt: >
+      You are a short-form video scriptwriter. Write a punchy, structured reel
+      script. Open with a strong hook, deliver 3-6 clear body scenes, and close
+      with a call to action. Keep each scene to one or two spoken sentences.
+    arc: [hook, explanation, chart, comparison, bullet_list, call_to_action]
+    hook: "Ever wondered about {topic}? Here is the quick breakdown."
+    cta: "If this was useful, follow and subscribe for more on {topic}."
+    body:
+      - "Let's start with what {topic} really means and why it matters."
+      - "The data shows that over 70 percent of people underestimate {topic}."
+      - "Compared to the usual approach, {topic} changes the game entirely."
+      - "Here are three things you should know about {topic}."
+      - "Take a look at how {topic} plays out in the real world."
+      - "The bottom line on {topic} is simpler than it sounds."
+
+  real_estate:
+    audience: aspiring property investors
+    tone: confident
+    system_prompt: >
+      You are a real-estate marketing scriptwriter. Write a persuasive reel that
+      opens with a bold hook, explains the opportunity, cites a compelling number,
+      compares options, and ends with a clear call to action to reach out.
+    arc: [hook, explanation, chart, comparison, image_insert, call_to_action]
+    hook: "Thinking about {topic}? This could change your next decade."
+    cta: "Message us today to get started with {topic}."
+    body:
+      - "Here is why {topic} is one of the smartest moves you can make early."
+      - "The numbers are clear: property values grew over 40 percent in a decade with {topic}."
+      - "Compared to renting, {topic} builds equity that works for you."
+      - "Take a look at this neighborhood and picture the upside of {topic}."
+      - "Here are three reasons {topic} beats waiting on the sidelines."
+
+  finance:
+    audience: young professionals
+    tone: authoritative
+    system_prompt: >
+      You are a finance educator. Write a clear, trustworthy reel that hooks with
+      a common misconception, explains the concept, shows a striking statistic,
+      contrasts choices, and closes by encouraging the viewer to take action.
+    arc: [hook, explanation, chart, comparison, bullet_list, call_to_action]
+    hook: "Most people get {topic} completely wrong. Let's fix that."
+    cta: "Follow for weekly, plain-English breakdowns of {topic}."
+    body:
+      - "First, understand what {topic} actually is and why it compounds."
+      - "The data is striking: starting early with {topic} can double your outcome, up 100 percent."
+      - "Compared to doing nothing, even small steps in {topic} add up fast."
+      - "Here are three simple rules to get {topic} right."
+
+  medical:
+    audience: health-conscious viewers
+    tone: reassuring
+    system_prompt: >
+      You are a medical communicator. Write an accurate, calm, non-alarmist reel:
+      hook with a relatable question, explain the basics, share a helpful figure,
+      and close with a responsible call to consult a professional. Avoid diagnoses.
+    arc: [hook, explanation, chart, bullet_list, call_to_action]
+    hook: "Have questions about {topic}? Here is what the evidence says."
+    cta: "Always talk to a qualified professional about {topic}."
+    body:
+      - "Let's cover the basics of {topic} in plain language."
+      - "Studies show that awareness of {topic} improves outcomes by nearly 30 percent."
+      - "Here are three habits that support {topic} every day."
+      - "Take a look at the simple steps most people overlook with {topic}."
+
+  education:
+    audience: curious learners
+    tone: energetic
+    system_prompt: >
+      You are an educational content creator. Write an engaging explainer reel:
+      hook with curiosity, break the idea into clear steps, include a memorable
+      fact, and end by inviting the viewer to learn more.
+    arc: [hook, explanation, chart, bullet_list, comparison, call_to_action]
+    hook: "Ever wondered how {topic} actually works? Let's break it down."
+    cta: "Follow along as we make {topic} simple, one reel at a time."
+    body:
+      - "At its core, {topic} is easier to grasp than it looks."
+      - "Here is a wild fact: over 90 percent of the effect of {topic} comes from one thing."
+      - "Here are three steps to master {topic} quickly."
+      - "Compared to the old way, understanding {topic} unlocks so much more."
+      - "Take a look at this example and watch {topic} click into place."
+
+  news:
+    audience: informed viewers
+    tone: neutral
+    system_prompt: >
+      You are a news explainer writer. Write a concise, balanced reel: hook with
+      the headline, give the essential context, present the key figure, note both
+      sides, and close by pointing to where to follow the story.
+    arc: [hook, explanation, chart, comparison, call_to_action]
+    hook: "Here is what you need to know about {topic} right now."
+    cta: "Follow for updates as the story on {topic} develops."
+    body:
+      - "Here is the essential context behind {topic}."
+      - "By the numbers: {topic} affected more than 60 percent of those surveyed."
+      - "Compared to last year, the situation around {topic} has shifted notably."
+
+  motivational:
+    audience: anyone chasing a goal
+    tone: inspiring
+    system_prompt: >
+      You are a motivational scriptwriter. Write an uplifting reel: hook with a
+      bold promise, reframe the challenge, deliver a punchy truth, and close with
+      an empowering call to act today.
+    arc: [hook, explanation, quote, bullet_list, call_to_action]
+    hook: "Your breakthrough with {topic} starts the moment you decide."
+    cta: "Take the first step on {topic} today. Save this and start now."
+    body:
+      - "The truth about {topic} is that starting beats waiting every single time."
+      - "As the saying goes, 'the best time to begin {topic} was yesterday.'"
+      - "Here are three moves to build momentum on {topic}."
+
+  talking_head:
+    audience: your community
+    tone: personal
+    system_prompt: >
+      You are writing a direct, to-camera talking-head reel. Keep it conversational
+      and first-person: hook the viewer, share the insight simply, and end with a
+      warm invitation to engage. Minimal jargon, no on-screen graphics required.
+    arc: [hook, talking_head, talking_head, call_to_action]
+    hook: "Let me tell you something important about {topic}."
+    cta: "Comment below with your take on {topic} and follow for more."
+    body:
+      - "In my experience, {topic} comes down to a few simple choices."
+      - "Here is the one thing I wish someone had told me about {topic}."
+      - "So if you take away one idea about {topic}, let it be this."

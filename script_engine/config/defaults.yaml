@@ -1,0 +1,24 @@
+# AI Prompt & Storyboard Engine defaults (Phase C10).
+#
+# Configuration, not code: pick the provider and generation knobs via
+# AICP__script__* env overrides or a user config file, with no code change.
+# Provider API keys are read from the environment at call time (ANTHROPIC_API_KEY,
+# OPENAI_API_KEY, GEMINI_API_KEY) — never stored here. The default provider is the
+# deterministic MockProvider, so the whole pipeline runs with no key.
+
+script:
+  provider: mock              # mock | openai | anthropic | gemini
+  model: ""                   # empty => the provider's own default model
+  temperature: 0.7            # sampling temperature (providers that reject it ignore it)
+
+  min_scenes: 3               # reject a brief with fewer scenes than this
+  max_scenes: 8               # ...or more than this
+  target_duration_s: 40.0     # aim for roughly this reel length
+
+  language: en                # narration language hint
+  style: informative          # tone/style hint passed to the provider
+  template: general           # default prompt template (see prompt_templates/)
+
+  max_tokens: 4096            # provider output cap
+  creator: ""                 # optional branding hints forwarded to the Scene Engine
+  channel: ""
