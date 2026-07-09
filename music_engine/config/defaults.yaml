@@ -1,0 +1,28 @@
+# Music & Audio Mixing Engine defaults (Phase C8).
+#
+# Configuration, not code: tune the background-music level, speech ducking, fade
+# lengths, loop behaviour, and the default built-in soundtrack — via
+# AICP__music__* env overrides or a user config file, with no code change.
+# Durations are in seconds; levels are gain multipliers in [0, 1]. Nothing here
+# invokes a model or the network — mixing is 100% deterministic and rule-based.
+
+music:
+  volume: 0.18                 # base music level under the voice (0..1)
+  track_gain: 1.0              # track master gain (applied on top of each clip)
+  default_soundtrack: ambient  # built-in procedural bed: ambient|upbeat|lofi|cinematic
+
+  ducking:
+    enabled: true              # lower music while narration plays
+    level: 0.35                # music multiplier under speech (0..1; lower = more duck)
+    attack_s: 0.25             # ramp-down time when speech starts
+    release_s: 0.60            # ramp-up time when speech ends
+    pad_s: 0.15                # widen each speech window by this (avoids pumping)
+
+  fade:
+    fade_in_s: 1.5             # music fades up over this at the reel start
+    fade_out_s: 2.0            # ...and down over this at the reel end
+    curve: linear              # linear | equal_power (C8 renders linear)
+
+  loop:
+    enabled: true              # tile the bed to fill a reel longer than the source
+    crossfade_s: 0.5           # overlap between loop iterations (0 = hard seam)
