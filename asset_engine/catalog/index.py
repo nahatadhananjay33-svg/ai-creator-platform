@@ -25,11 +25,16 @@ from pathlib import Path
 from reel_engine.interfaces.types import ASSET_KINDS
 
 from asset_engine.catalog.types import CatalogEntry, kind_family
-from asset_engine.providers.base import infer_kind
 
 _VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff"}
 _MEDIA_EXTS = _VIDEO_EXTS | _IMAGE_EXTS
+
+
+def _infer_kind(path: Path) -> str:
+    """Default kind from the extension (video vs image); kept local so the
+    catalog has no dependency on the providers package (avoids an import cycle)."""
+    return "video" if path.suffix.lower() in _VIDEO_EXTS else "image"
 
 #: Folder-name → asset kind (so a ``charts/`` subtree indexes as ``chart``).
 _DIR_KIND = {
@@ -131,7 +136,7 @@ class AssetCatalog:
             if not path.is_file() or path.suffix.lower() not in _MEDIA_EXTS:
                 continue
             parent = path.parent.name.lower()
-            kind = _DIR_KIND.get(parent) or infer_kind(path)
+            kind = _DIR_KIND.get(parent) or _infer_kind(path)
             rel = path.relative_to(root).as_posix()
             tags = tokenize_tags(path.stem)     # tags come from the filename only
             width = height = 0

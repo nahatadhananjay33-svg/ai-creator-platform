@@ -24,3 +24,15 @@ assets:
     duration_s: 0.4
 
   transition: cut                 # cut | cross_dissolve
+
+  # -- resolver (C9): satisfy Scene-Planner AssetSlots from the local catalog ---
+  resolver:
+    library_dir: null             # local asset library root (null => none; pass one at call time)
+    per_provider_limit: 16        # max candidates each provider returns per query
+    min_score: 0.0                # reject a selection scoring below this (0 => accept best match)
+    weights:                      # deterministic ranking weights (see ranking/scorer.py)
+      type: 3.0                   # kind match (chart==chart) — the strongest signal
+      aspect: 1.5                 # candidate aspect vs the slot region's aspect
+      duration: 1.0              # video length vs slot duration (stills always fine)
+      tags: 2.0                   # overlap with the slot hint's keyword tags
+      resolution: 1.0            # enough pixels for the on-screen region

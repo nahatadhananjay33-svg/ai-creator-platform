@@ -22,12 +22,34 @@ AssetCrop/AssetAnimation/AssetTransition) live in ``reel_engine.interfaces``.
 """
 from __future__ import annotations
 
+from asset_engine.catalog import (
+    AssetCandidate,
+    AssetCatalog,
+    AssetQuery,
+    CatalogEntry,
+)
 from asset_engine.config.settings import AssetEngineConfig, load_asset_engine_config
 from asset_engine.engine import AssetEngine
-from asset_engine.providers import AssetSpec, LocalAssetProvider, infer_kind
+from asset_engine.providers import (
+    AssetSpec,
+    CandidateProvider,
+    FileSystemProvider,
+    LocalAssetProvider,
+    LocalLibraryProvider,
+    MockProvider,
+    infer_kind,
+)
+from asset_engine.ranking import RankWeights, rank_candidates
+from asset_engine.resolver import (
+    AssetResolutionError,
+    AssetResolver,
+    ProviderManager,
+    Resolution,
+    build_query,
+)
 from asset_engine.timeline import build_asset_track
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 __all__ = [
     "AssetEngine",
@@ -37,4 +59,20 @@ __all__ = [
     "LocalAssetProvider",
     "infer_kind",
     "build_asset_track",
+    # C9 retrieval
+    "AssetCatalog",
+    "CatalogEntry",
+    "AssetCandidate",
+    "AssetQuery",
+    "CandidateProvider",
+    "LocalLibraryProvider",
+    "FileSystemProvider",
+    "MockProvider",
+    "RankWeights",
+    "rank_candidates",
+    "AssetResolver",
+    "ProviderManager",
+    "Resolution",
+    "AssetResolutionError",
+    "build_query",
 ]
