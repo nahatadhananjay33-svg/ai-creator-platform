@@ -40,3 +40,28 @@ python -m asset_engine.scripts.render_asset_demo --no-overlays    # assets only
 ```
 
 See `docs/VISUAL_ASSET_ENGINE.md` for architecture, layouts, and limitations.
+
+## Review & Editing Engine (Phase C11)
+
+Human-in-the-loop editing — prompt → AI storyboard → review → immutable patch
+set → incremental plan → updated playable MP4 (no whole-reel rebuild):
+
+```
+python -m editing_engine.scripts.render_edit_demo                  # real MP4 (ffmpeg)
+python -m editing_engine.scripts.render_edit_demo --renderer mock  # hermetic proxy
+```
+
+See `docs/EDITING_ENGINE.md` for the editable model, patches, and limitations.
+
+## Creator Studio (Phase C12)
+
+The deterministic visual editor (interface layer over the Editing Engine) —
+open → storyboard/timeline → edit via immutable patches → incremental
+regeneration → preview → export an updated reel:
+
+```
+python -m creator_studio.scripts.render_studio_demo                  # real MP4 (ffmpeg)
+python -m creator_studio.scripts.render_studio_demo --renderer mock  # hermetic proxy
+```
+
+See `docs/CREATOR_STUDIO.md` for the panels, patch integration, and limitations.
