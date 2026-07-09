@@ -21,6 +21,8 @@ from reel_engine.interfaces.types import (
     AssetRef,
     AssetTrack,
     AssetTransition,
+    AudioEnvelope,
+    AudioFade,
     BrandingElement,
     BrandingTrack,
     CaptionAnimation,
@@ -28,9 +30,13 @@ from reel_engine.interfaces.types import (
     CaptionStyle,
     CaptionTrack,
     Clip,
+    DuckingRule,
     Intro,
     Logo,
+    LoopRule,
     LowerThird,
+    MusicClip,
+    MusicTrack,
     Outro,
     Scene,
     Theme,
@@ -218,6 +224,40 @@ def _asset_track_to_dict(t: AssetTrack) -> dict[str, Any]:
             "clips": [_asset_clip_to_dict(c) for c in t.clips]}
 
 
+# ---- music (C8) ----
+def _fade_to_dict(f: AudioFade) -> dict[str, Any]:
+    return {"fade_in_s": f.fade_in_s, "fade_out_s": f.fade_out_s, "curve": f.curve}
+
+
+def _envelope_to_dict(e: AudioEnvelope) -> dict[str, Any]:
+    return {"points": [[t, g] for t, g in e.points]}
+
+
+def _ducking_to_dict(d: DuckingRule) -> dict[str, Any]:
+    return {"enabled": d.enabled, "duck_level": d.duck_level,
+            "attack_s": d.attack_s, "release_s": d.release_s, "pad_s": d.pad_s}
+
+
+def _loop_to_dict(l: LoopRule) -> dict[str, Any]:
+    return {"enabled": l.enabled, "crossfade_s": l.crossfade_s}
+
+
+def _music_clip_to_dict(c: MusicClip) -> dict[str, Any]:
+    return {
+        "clip_id": c.clip_id, "source": _asset_to_dict(c.source),
+        "start_s": c.start_s, "end_s": c.end_s, "gain": c.gain,
+        "source_offset_s": c.source_offset_s,
+        "fade": _fade_to_dict(c.fade), "envelope": _envelope_to_dict(c.envelope),
+        "loop": _loop_to_dict(c.loop), "ducking": _ducking_to_dict(c.ducking),
+        "mute_sections": [[s, e] for s, e in c.mute_sections],
+    }
+
+
+def _music_track_to_dict(t: MusicTrack) -> dict[str, Any]:
+    return {"track_id": t.track_id, "gain": t.gain,
+            "clips": [_music_clip_to_dict(c) for c in t.clips]}
+
+
 def timeline_to_dict(tl: Timeline) -> dict[str, Any]:
     """Plain JSON-able mapping for a Timeline (stable field order)."""
     d = {
@@ -230,6 +270,8 @@ def timeline_to_dict(tl: Timeline) -> dict[str, Any]:
         d["branding"] = _branding_to_dict(tl.branding)
     if tl.asset_tracks:
         d["asset_tracks"] = [_asset_track_to_dict(t) for t in tl.asset_tracks]
+    if tl.music_tracks:
+        d["music_tracks"] = [_music_track_to_dict(t) for t in tl.music_tracks]
     return d
 
 
@@ -452,11 +494,56 @@ def _asset_track_from_dict(d: dict[str, Any]) -> AssetTrack:
                       clips=tuple(_asset_clip_from_dict(c) for c in d.get("clips", ())))
 
 
+# ---- music (C8) ----
+def _fade_from_dict(d: dict[str, Any] | None) -> AudioFade:
+    if not d:
+        return AudioFade()
+    return AudioFade(fade_in_s=d.get("fade_in_s", 0.0),
+                     fade_out_s=d.get("fade_out_s", 0.0),
+                     curve=d.get("curve", "linear"))
+
+
+def _envelope_from_dict(d: dict[str, Any] | None) -> AudioEnvelope:
+    if not d:
+        return AudioEnvelope()
+    return AudioEnvelope(points=tuple((p[0], p[1]) for p in d.get("points", ())))
+
+
+def _ducking_from_dict(d: dict[str, Any] | None) -> DuckingRule:
+    if not d:
+        return DuckingRule()
+    return DuckingRule(enabled=d.get("enabled", True), duck_level=d.get("duck_level", 0.35),
+                       attack_s=d.get("attack_s", 0.25), release_s=d.get("release_s", 0.60),
+                       pad_s=d.get("pad_s", 0.0))
+
+
+def _loop_from_dict(d: dict[str, Any] | None) -> LoopRule:
+    if not d:
+        return LoopRule()
+    return LoopRule(enabled=d.get("enabled", True), crossfade_s=d.get("crossfade_s", 0.0))
+
+
+def _music_clip_from_dict(d: dict[str, Any]) -> MusicClip:
+    return MusicClip(
+        clip_id=d["clip_id"], source=_asset_from_dict(d.get("source")),
+        start_s=d.get("start_s", 0.0), end_s=d.get("end_s", 0.0),
+        gain=d.get("gain", 0.18), source_offset_s=d.get("source_offset_s", 0.0),
+        fade=_fade_from_dict(d.get("fade")), envelope=_envelope_from_dict(d.get("envelope")),
+        loop=_loop_from_dict(d.get("loop")), ducking=_ducking_from_dict(d.get("ducking")),
+        mute_sections=tuple((m[0], m[1]) for m in d.get("mute_sections", ())),
+    )
+
+
+def _music_track_from_dict(d: dict[str, Any]) -> MusicTrack:
+    return MusicTrack(track_id=d.get("track_id", "music"), gain=d.get("gain", 1.0),
+                      clips=tuple(_music_clip_from_dict(c) for c in d.get("clips", ())))
+
+
 def timeline_from_dict(d: dict[str, Any]) -> Timeline:
     """Rebuild a Timeline from a mapping. Rejects unknown future schema
     versions loudly rather than silently mis-parsing. ``caption_tracks``,
-    ``branding`` and ``asset_tracks`` are optional so older projects load
-    unchanged."""
+    ``branding``, ``asset_tracks`` and ``music_tracks`` are optional so older
+    projects load unchanged."""
     version = d.get("schema_version", TIMELINE_SCHEMA_VERSION)
     if version > TIMELINE_SCHEMA_VERSION:
         raise ValueError(
@@ -471,6 +558,8 @@ def timeline_from_dict(d: dict[str, Any]) -> Timeline:
         branding=_branding_from_dict(d.get("branding")),
         asset_tracks=tuple(_asset_track_from_dict(t)
                            for t in d.get("asset_tracks", ())),
+        music_tracks=tuple(_music_track_from_dict(t)
+                           for t in d.get("music_tracks", ())),
         schema_version=version,
     )
 

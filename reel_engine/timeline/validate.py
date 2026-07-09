@@ -15,6 +15,7 @@ from reel_engine.interfaces.types import (
     ASSET_KINDS,
     ASSET_LAYOUTS,
     ASSET_TRANSITIONS,
+    AUDIO_FADE_CURVES,
     BRANDING_POSITIONS,
     TIMELINE_SCHEMA_VERSION,
     Clip,
@@ -111,6 +112,12 @@ def validate_timeline(tl: Timeline) -> list[str]:
     asset_ids: set[str] = set()
     for i, track in enumerate(tl.asset_tracks):
         problems.extend(_validate_asset_track(track, i, reel_duration, asset_ids))
+
+    # Music tracks (C8) — background beds mixed under the voice, absolute reel
+    # time. Absent on v1..v4 timelines, which skip this entirely.
+    music_ids: set[str] = set()
+    for i, track in enumerate(tl.music_tracks):
+        problems.extend(_validate_music_track(track, i, reel_duration, music_ids))
 
     return problems
 
@@ -355,6 +362,85 @@ def _validate_asset_track(track, index: int, reel_duration: float,
             problems.append(f"{where}: duplicate clip_id")
         clip_ids.add(clip.clip_id)
         problems.extend(_validate_asset_clip(clip, where, reel_duration))
+    return problems
+
+
+def _validate_music_clip(clip, where: str, reel_duration: float) -> list[str]:
+    problems: list[str] = []
+    if clip.source is None or not (clip.source.uri and str(clip.source.uri).strip()):
+        problems.append(f"{where}: missing source audio (no file)")
+    if clip.end_s <= clip.start_s:
+        problems.append(f"{where}: end_s {clip.end_s} <= start_s {clip.start_s}")
+    if clip.start_s < -_EPS or clip.end_s > reel_duration + _EPS:
+        problems.append(
+            f"{where}: window [{clip.start_s}, {clip.end_s}] outside reel "
+            f"[0, {reel_duration}]")
+    if not (0.0 <= clip.gain <= 1.0):
+        problems.append(f"{where}: gain must be in [0, 1], got {clip.gain}")
+    if clip.source_offset_s < -_EPS:
+        problems.append(f"{where}: source_offset_s must be non-negative, got {clip.source_offset_s}")
+    # fade
+    f = clip.fade
+    if f.curve not in AUDIO_FADE_CURVES:
+        problems.append(f"{where}: fade.curve {f.curve!r} not in {AUDIO_FADE_CURVES}")
+    if f.fade_in_s < -_EPS or f.fade_out_s < -_EPS:
+        problems.append(f"{where}: fade durations must be non-negative")
+    if f.fade_in_s + f.fade_out_s > clip.duration_s + _EPS:
+        problems.append(
+            f"{where}: fades ({f.fade_in_s}+{f.fade_out_s}s) exceed clip duration "
+            f"{clip.duration_s}s")
+    # loop
+    if clip.loop.crossfade_s < -_EPS:
+        problems.append(f"{where}: loop.crossfade_s must be non-negative")
+    # ducking
+    dk = clip.ducking
+    if not (0.0 <= dk.duck_level <= 1.0):
+        problems.append(f"{where}: ducking.duck_level must be in [0, 1], got {dk.duck_level}")
+    if dk.attack_s < -_EPS or dk.release_s < -_EPS or dk.pad_s < -_EPS:
+        problems.append(f"{where}: ducking attack/release/pad must be non-negative")
+    # envelope: breakpoints ascending in time, gains non-negative, inside window
+    prev_t = None
+    for j, pt in enumerate(clip.envelope.points):
+        if not (isinstance(pt, (tuple, list)) and len(pt) == 2):
+            problems.append(f"{where}: envelope point[{j}] must be (time_s, gain)")
+            continue
+        t, g = pt
+        if g < -_EPS:
+            problems.append(f"{where}: envelope point[{j}] gain {g} is negative")
+        if prev_t is not None and t < prev_t - _EPS:
+            problems.append(f"{where}: envelope point[{j}] time {t} not ascending")
+        prev_t = t
+    # mute sections: ordered, inside the clip window
+    for j, sec in enumerate(clip.mute_sections):
+        if not (isinstance(sec, (tuple, list)) and len(sec) == 2):
+            problems.append(f"{where}: mute_section[{j}] must be (start_s, end_s)")
+            continue
+        s, e = sec
+        if e <= s:
+            problems.append(f"{where}: mute_section[{j}] end {e} <= start {s}")
+        if s < clip.start_s - _EPS or e > clip.end_s + _EPS:
+            problems.append(
+                f"{where}: mute_section[{j}] [{s}, {e}] outside clip window "
+                f"[{clip.start_s}, {clip.end_s}]")
+    return problems
+
+
+def _validate_music_track(track, index: int, reel_duration: float,
+                          seen_ids: set) -> list[str]:
+    problems: list[str] = []
+    where0 = f"music_track[{index}] {track.track_id!r}"
+    if track.track_id in seen_ids:
+        problems.append(f"{where0}: duplicate music track_id")
+    seen_ids.add(track.track_id)
+    if track.gain < -_EPS:
+        problems.append(f"{where0}: gain must be non-negative, got {track.gain}")
+    clip_ids: set[str] = set()
+    for clip in track.clips:
+        where = f"{where0} clip {clip.clip_id!r}"
+        if clip.clip_id in clip_ids:
+            problems.append(f"{where}: duplicate clip_id")
+        clip_ids.add(clip.clip_id)
+        problems.extend(_validate_music_clip(clip, where, reel_duration))
     return problems
 
 

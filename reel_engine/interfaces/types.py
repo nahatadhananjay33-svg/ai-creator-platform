@@ -26,9 +26,10 @@ from typing import Any
 #: Bumped whenever the serialized Timeline schema changes incompatibly. serde
 #: writes it into every project file; the loader validates/migrates against it.
 #: v2 (Phase C4) added ``Timeline.caption_tracks``; v3 (Phase C5) added
-#: ``Timeline.branding``; v4 (Phase C6) added ``Timeline.asset_tracks`` — all
-#: purely additive: older projects still load (they simply have none of them).
-TIMELINE_SCHEMA_VERSION = 4
+#: ``Timeline.branding``; v4 (Phase C6) added ``Timeline.asset_tracks``; v5
+#: (Phase C8) added ``Timeline.music_tracks`` — all purely additive: older
+#: projects still load (they simply have none of them).
+TIMELINE_SCHEMA_VERSION = 5
 
 #: RGB colour, 0-255 per channel (the IR is colour-space agnostic; renderers
 #: convert to whatever their pipeline needs — e.g. BGR24 frames).
@@ -615,6 +616,137 @@ class AssetTrack:
         return round(max((c.end_s for c in self.clips), default=0.0), 6)
 
 
+# =========================================================================
+# Music & Audio Mixing (Phase C8) — a native Timeline track, timed in ABSOLUTE
+# reel time. Music is data, not a renderer special-case: the Music Engine
+# populates these frozen types (a background bed with fades, a loop rule, a
+# volume envelope, and speech ducking) and the renderer lowers them by *mixing*
+# audio — it never hardcodes a soundtrack. Everything stays immutable and
+# additive, so v1..v4 timelines are unaffected (they simply carry no music).
+# =========================================================================
+#: Fade shape for a music clip's in/out ramp. C8 renders ``linear``;
+#: ``equal_power`` is reserved (carried but treated as linear until a later phase).
+AUDIO_FADE_CURVES = ("linear", "equal_power")
+
+
+@dataclass(frozen=True)
+class AudioFade:
+    """A music clip's fade-in / fade-out, in seconds (0 = no fade).
+
+    Applied at the clip's own start/end within its reel window; ``curve`` is the
+    ramp shape (C8: linear). Fades keep a looped bed from starting/stopping
+    abruptly and are the deterministic basis of a crossfade at the reel edges."""
+
+    fade_in_s: float = 0.0
+    fade_out_s: float = 0.0
+    curve: str = "linear"                  # see AUDIO_FADE_CURVES
+
+    @property
+    def has_fade(self) -> bool:
+        return self.fade_in_s > 0.0 or self.fade_out_s > 0.0
+
+
+@dataclass(frozen=True)
+class AudioEnvelope:
+    """A piecewise-linear volume automation over ABSOLUTE reel time.
+
+    ``points`` is a tuple of ``(time_s, gain)`` breakpoints (gain a non-negative
+    multiplier, usually 0..1); the gain between points is linearly interpolated,
+    held flat before the first and after the last. Empty means a constant gain of
+    1.0 (no automation). This is how a section of the reel can be made quieter or
+    swelled without touching the source audio."""
+
+    points: tuple = ()                     # tuple[tuple[float, float], ...]
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.points
+
+
+@dataclass(frozen=True)
+class DuckingRule:
+    """Deterministic speech ducking: lower the music while narration plays.
+
+    Ducking is driven by the reel's **speech windows** (the caption segments, or
+    the spoken scenes) — NOT by analysing the audio waveform — so it is 100%
+    deterministic and identical across renderers. While speech is present the
+    music gain ramps down to ``duck_level`` (a multiplier in [0,1]); in the gaps
+    it ramps back to full. ``attack_s``/``release_s`` are the ramp lengths."""
+
+    enabled: bool = True
+    duck_level: float = 0.35               # music gain multiplier under speech (0..1)
+    attack_s: float = 0.25                 # ramp-down time when speech starts
+    release_s: float = 0.60                # ramp-up time when speech ends
+    pad_s: float = 0.0                     # extend each speech window by this much
+
+
+@dataclass(frozen=True)
+class LoopRule:
+    """How a music bed fills a window longer than its source.
+
+    When ``enabled`` the source is tiled to cover the clip window; ``crossfade_s``
+    overlaps successive iterations by that many seconds (a short equal-ish blend)
+    so the seam is inaudible. When disabled the bed plays once and the remainder
+    is silence."""
+
+    enabled: bool = True
+    crossfade_s: float = 0.0               # overlap between loop iterations (s)
+
+
+@dataclass(frozen=True)
+class MusicClip:
+    """One music bed placed on the reel over an absolute time window.
+
+    ``source`` references a local audio file (the Music Engine resolves/generates
+    it; the renderer only reads it). ``gain`` is the base music volume (0..1);
+    ``source_offset_s`` picks where in the source to start. The window
+    ``[start_s, end_s]`` is absolute reel time. Fades, loop behaviour, the volume
+    envelope, ducking, and any ``mute_sections`` (absolute ``(start,end)`` spans
+    where the music is silenced) all shape how the bed is mixed under the voice."""
+
+    clip_id: str
+    source: AssetRef | None = None
+    start_s: float = 0.0
+    end_s: float = 0.0
+    gain: float = 0.18                     # base music level (0..1)
+    source_offset_s: float = 0.0
+    fade: AudioFade = field(default_factory=AudioFade)
+    envelope: AudioEnvelope = field(default_factory=AudioEnvelope)
+    loop: LoopRule = field(default_factory=LoopRule)
+    ducking: DuckingRule = field(default_factory=DuckingRule)
+    mute_sections: tuple = ()              # tuple[tuple[float, float], ...] absolute
+
+    @property
+    def duration_s(self) -> float:
+        return round(self.end_s - self.start_s, 6)
+
+
+@dataclass(frozen=True)
+class MusicTrack:
+    """An ordered set of music clips (usually one background bed), absolute time.
+
+    ``gain`` is a track master multiplier applied on top of each clip's own gain.
+    The renderer mixes every clip into the reel's audio under the voice; clips may
+    overlap (later phases can layer stingers), summed then limited so the mix
+    never clips."""
+
+    track_id: str = "music"
+    clips: tuple = ()                      # tuple[MusicClip, ...]
+    gain: float = 1.0                      # track master gain
+
+    @property
+    def has_clips(self) -> bool:
+        return bool(self.clips)
+
+    @property
+    def n_clips(self) -> int:
+        return len(self.clips)
+
+    @property
+    def duration_s(self) -> float:
+        return round(max((c.end_s for c in self.clips), default=0.0), 6)
+
+
 @dataclass(frozen=True)
 class TimelineMeta:
     """Global, render-relevant metadata. Deliberately free of timestamps or any
@@ -645,6 +777,7 @@ class Timeline:
     caption_tracks: tuple = ()      # tuple[CaptionTrack, ...] — C4; absolute reel time
     branding: "BrandingTrack | None" = None   # C5; native branding track (absolute time)
     asset_tracks: tuple = ()        # tuple[AssetTrack, ...] — C6; B-roll, absolute time
+    music_tracks: tuple = ()        # tuple[MusicTrack, ...] — C8; music beds, absolute time
     schema_version: int = TIMELINE_SCHEMA_VERSION
 
     @property
@@ -666,6 +799,10 @@ class Timeline:
     @property
     def has_assets(self) -> bool:
         return any(t.clips for t in self.asset_tracks)
+
+    @property
+    def has_music(self) -> bool:
+        return any(t.clips for t in self.music_tracks)
 
 
 @dataclass(frozen=True)
