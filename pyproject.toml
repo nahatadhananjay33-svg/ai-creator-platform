@@ -53,12 +53,13 @@ packages = { find = { include = [
     "music_engine*",
     "editing_engine*",
     "creator_studio*",
+    "media_intelligence*",
     "reel_engine*",
     "export*",
 ] } }
 
 [tool.pytest.ini_options]
-testpaths = ["foundation/tests", "voice_engine/tests", "avatar_engine/tests", "caption_engine/tests", "scene_engine/tests", "music_engine/tests", "script_engine/tests", "editing_engine/tests", "creator_studio/tests"]
+testpaths = ["foundation/tests", "voice_engine/tests", "avatar_engine/tests", "caption_engine/tests", "scene_engine/tests", "music_engine/tests", "script_engine/tests", "editing_engine/tests", "creator_studio/tests", "media_intelligence/tests"]
 addopts = "-q"
 markers = [
     "integration: end-to-end test exercising real engines (may need ffmpeg/models)",

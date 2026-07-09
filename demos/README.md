@@ -65,3 +65,17 @@ python -m creator_studio.scripts.render_studio_demo --renderer mock  # hermetic 
 ```
 
 See `docs/CREATOR_STUDIO.md` for the panels, patch integration, and limitations.
+
+## Media Intelligence & Asset Management (Phase C13)
+
+Deterministic media decisions between the AI Storyboard and Editing engines —
+registry → search/rank → per-scene B-roll + music + voice recommendations →
+apply as immutable patches → project-wide consistency → updated reel:
+
+```
+python -m media_intelligence.scripts.render_media_demo                  # real MP4 (ffmpeg)
+python -m media_intelligence.scripts.render_media_demo --renderer mock  # hermetic proxy
+```
+
+See `docs/MEDIA_INTELLIGENCE.md` for the registry, recommendations, providers,
+consistency, and limitations.
