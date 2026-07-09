@@ -23,7 +23,7 @@ from reel_engine.interfaces.types import Timeline
 from asset_engine import AssetEngine
 from branding_engine import BrandingEngine
 from branding_engine.assets import default_logo_path
-from caption_engine import get_style
+from caption_engine import CaptionEngine, get_style
 from music_engine import MusicEngine
 from scene_engine import SceneEngine
 from scene_engine.storyboard.types import Storyboard as SceneStoryboard
@@ -118,10 +118,23 @@ class EditingEngine:
         optional local library. Returns ``(scene_storyboard, timeline)``. The
         Timeline IR and renderer are unchanged — this only stacks native tracks."""
         scene_sb = self.plan_scene_storyboard(project)
-        timeline = build_scene_timeline(
-            scene_sb, width=project.width, height=project.height, fps=project.fps,
-            with_captions=True, caption_kind=project.caption_kind,
-            caption_style=get_style(project.caption_preset))
+        # sentence/static captions come from the Scene Engine's per-scene track;
+        # word/karaoke need per-word timings, so those route through the Caption
+        # Engine over the full narration (both are valid native caption tracks).
+        if project.caption_kind in ("word", "karaoke"):
+            timeline = build_scene_timeline(
+                scene_sb, width=project.width, height=project.height,
+                fps=project.fps, with_captions=False)
+            text = " ".join(s.narration for s in project.storyboard.scenes)
+            captions = CaptionEngine().generate(
+                text=text, duration_s=scene_sb.duration_s,
+                kind=project.caption_kind, preset=project.caption_preset)
+            timeline = dataclasses.replace(timeline, caption_tracks=(captions,))
+        else:
+            timeline = build_scene_timeline(
+                scene_sb, width=project.width, height=project.height, fps=project.fps,
+                with_captions=True, caption_kind=project.caption_kind,
+                caption_style=get_style(project.caption_preset))
 
         if with_assets and asset_library is not None:
             slots = list(scene_sb.all_asset_slots)
