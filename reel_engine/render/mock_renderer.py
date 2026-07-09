@@ -97,6 +97,19 @@ class MockRenderer(TimelineRenderer):
         write_wav(path, WavData(samples=array("h", bytes(2 * n)), sample_rate=sr, channels=1))
         return path
 
+    def _write_audio(self, path: Path, timeline) -> Path:
+        """The reel's audio sidecar. With a native music track (C8) this is the
+        deterministic voice+music mix (looped/faded/enveloped/ducked, soft-limited
+        so it never clips); otherwise the silent bed the skeleton always wrote.
+
+        The mock has no video-muxed audio, so the sidecar WAV *is* the reel audio —
+        which is exactly what makes music mixing hermetically verifiable."""
+        if timeline.has_music:
+            from reel_engine.render.music import mix_timeline_audio
+            write_wav(path, mix_timeline_audio(timeline, self.config.render.audio_sample_rate))
+            return path
+        return self._write_silent_audio(path, timeline.duration_s)
+
     def _write_captions(self, path: Path, timeline) -> Path:
         """SRT sidecar. Prefers the native caption track (C4); falls back to
         per-scene text (C2 timelines with no caption tracks)."""
@@ -344,7 +357,7 @@ class MockRenderer(TimelineRenderer):
             frames = self._overlay_branding(frames, w, h, fps, tl)
             write_raw_avi(out, VideoFrames(frames=frames, width=w, height=h, fps=float(fps)))
 
-            audio_path = self._write_silent_audio(out.with_suffix(".wav"), tl.duration_s)
+            audio_path = self._write_audio(out.with_suffix(".wav"), tl)
             captions_path = self._write_captions(out.with_suffix(".srt"), tl)
 
             exports = []
@@ -372,5 +385,5 @@ class MockRenderer(TimelineRenderer):
             render_time_s=round(sw.elapsed_s, 4), timeline_hash=timeline_content_hash(tl),
             exports=tuple(exports), audio_path=audio_path, captions_path=captions_path,
             metadata={"proxy": True, "base_resolution": [tl.meta.width, tl.meta.height],
-                      "total_frames": len(frames)},
+                      "total_frames": len(frames), "music": tl.has_music},
         )

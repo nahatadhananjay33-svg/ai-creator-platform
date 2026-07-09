@@ -470,6 +470,42 @@ class FFmpegRenderer(TimelineRenderer):
         tmp.replace(master)
         return True
 
+    # -------------------------------------------------------------- music (C8)
+    def _apply_music(self, master: Path, tl) -> bool:
+        """Mix the native music track into ``master``'s audio (voice + music).
+
+        Deterministic and backend-parity by design: the master's existing audio
+        (the voice) is extracted to PCM, the SAME shared mixer the mock renderer
+        uses lowers the MusicTrack (loop/fade/envelope/duck/mute) and sums it under
+        the voice with a soft limiter (so it never clips), and the mixed WAV is
+        muxed back over the untouched video (``-c:v copy``). No-op without music."""
+        from foundation.shared_utils import read_wav, write_wav
+        from foundation.shared_utils.audio_mix import to_float
+        from reel_engine.render.music import mix_timeline_audio
+
+        if not tl.has_music:
+            return False
+        r = self.config.render
+        sr = r.audio_sample_rate
+        voice_wav = master.with_name(f"{master.stem}__voice.wav")
+        # extract the current (voice) audio as mono PCM at the render sample rate
+        self._run(["-i", str(master), "-vn", "-ac", "1", "-ar", str(sr),
+                   "-c:a", "pcm_s16le", str(voice_wav)])
+        n_total = int(round(tl.duration_s * sr))
+        voice = to_float(read_wav(voice_wav).samples)[:n_total]
+        mixed_wav = master.with_name(f"{master.stem}__mix.wav")
+        write_wav(mixed_wav, mix_timeline_audio(tl, sr, voice=voice))
+        # remux: keep the video as-is, replace audio with the mix
+        tmp = master.with_name(f"{master.stem}__music{master.suffix}")
+        self._run(["-i", str(master), "-i", str(mixed_wav),
+                   "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                   "-c:a", r.audio_codec, "-ar", str(sr), "-ac", "1",
+                   "-shortest", str(tmp)])
+        tmp.replace(master)
+        voice_wav.unlink(missing_ok=True)
+        mixed_wav.unlink(missing_ok=True)
+        return True
+
     def _concat(self, scene_files: list[Path], out: Path, work: Path) -> None:
         listfile = work / "concat.txt"
         listfile.write_text("".join(f"file '{p.resolve()}'\n" for p in scene_files),
@@ -522,6 +558,9 @@ class FFmpegRenderer(TimelineRenderer):
             assets_drawn = self._apply_assets(out, tl)
             captions_drawn = self._apply_captions(out, tl)
             branding_drawn = self._apply_branding(out, tl)
+            # Music mixes into the master audio BEFORE export so every profile
+            # (which stream-copies audio) inherits the same voice+music mix.
+            music_mixed = self._apply_music(out, tl)
 
             exports = list(self.export_master(out, request.export_profiles))
 
@@ -542,6 +581,6 @@ class FFmpegRenderer(TimelineRenderer):
             exports=tuple(exports),
             metadata={"has_text": self._font is not None, "font": self._font,
                       "assets": assets_drawn, "captions": captions_drawn,
-                      "branding": branding_drawn,
+                      "branding": branding_drawn, "music": music_mixed,
                       "base_resolution": [tl.meta.width, tl.meta.height]},
         )
