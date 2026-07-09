@@ -1,0 +1,39 @@
+# Scene & Storyboard Planning Engine defaults (Phase C7).
+#
+# Configuration, not code: tune deterministic scene splitting, timing, and the
+# preferred visual mix via AICP__scene__* env overrides or a user config file,
+# with no code change. Durations are in seconds; percentages are fractions in
+# [0, 1]. Nothing here invokes a model — planning is 100% rule-based.
+
+scene:
+  # -- speech / timing estimation ------------------------------------------
+  words_per_minute: 150.0        # narration pace used to estimate speech length
+  speech_min_s: 0.8              # a scene's speech never estimated below this
+  speech_max_s: 30.0             # ...nor above this
+  transition_s: 0.0              # gap between scenes (0.0 = hard cut; no overlap)
+
+  # -- scene splitting ------------------------------------------------------
+  max_scene_duration_s: 8.0      # split a scene once its estimated speech exceeds this
+  min_scene_duration_s: 1.5      # pad a scene's window up to this floor
+  max_words_per_scene: 30        # split once a scene reaches this many words
+  min_words_per_scene: 3         # merge a shorter trailing fragment back
+  explanation_min_words: 24      # a plain scene at/above this is EXPLANATION, else TALKING_HEAD
+
+  # -- preferred beat durations --------------------------------------------
+  preferred_cta_duration_s: 3.0  # a call-to-action scene is padded to at least this
+  preferred_outro_duration_s: 3.0  # ...and an outro scene to at least this
+
+  # -- preferred visual mix (soft targets, surfaced for reporting/validation)
+  preferred_avatar_pct: 0.6      # fraction of reel time an avatar is on screen
+  preferred_talking_head_pct: 0.5  # fraction spent in talking-head/explanation
+  preferred_broll_pct: 0.35      # fraction with a B-roll asset on screen
+
+  # -- preferred layouts ----------------------------------------------------
+  default_asset_layout: full_screen       # layout for a full-frame B-roll insert
+  pip_layout: picture_in_picture          # layout for an avatar inset over B-roll
+  pip_scale: 0.30                         # avatar/asset PIP width fraction
+  comparison_layout: side_by_side         # layout for comparison scenes
+
+  # -- captions -------------------------------------------------------------
+  caption_kind: sentence         # sentence | word | karaoke | static
+  caption_preset: clean          # caption style preset name
