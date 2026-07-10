@@ -16,5 +16,13 @@ from __future__ import annotations
 from batch_runner.entry import BatchEntry
 from batch_runner.errors import BatchError
 from batch_runner.input import load_entries
+from batch_runner.runner import BatchResult, BatchRunner, ReelOutcome
 
-__all__ = ["BatchEntry", "BatchError", "load_entries"]
+__all__ = [
+    "BatchEntry",
+    "BatchError",
+    "load_entries",
+    "BatchRunner",
+    "BatchResult",
+    "ReelOutcome",
+]
