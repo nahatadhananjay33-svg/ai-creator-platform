@@ -173,6 +173,7 @@ Notes:
 ## Key documents
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — platform architecture and phase reuse map
+- [docs/CONTENT_LIBRARY.md](docs/CONTENT_LIBRARY.md) — Content Library: local single-user project + content store (Phase C15)
 - [docs/WORKFLOW_ENGINE.md](docs/WORKFLOW_ENGINE.md) — Workflow Engine: the deterministic production orchestrator (Phase C14)
 - [docs/EDITING_ENGINE.md](docs/EDITING_ENGINE.md) — Review & Editing Engine: immutable patches + incremental rendering (Phase C11)
 - [docs/PHASE_A36_REPORT.md](docs/PHASE_A36_REPORT.md) — latest phase: GPU validation findings
