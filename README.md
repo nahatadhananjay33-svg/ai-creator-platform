@@ -255,6 +255,7 @@ so the core installs and tests with no GPU.
 - [docs/WORKFLOW_ENGINE.md](docs/WORKFLOW_ENGINE.md) — the deterministic orchestrator
 - [quality_engine/docs/QUALITY_ENGINE.md](quality_engine/docs/QUALITY_ENGINE.md) — the quality checks
 - [upload_engine/docs/UPLOAD_ASSISTANT.md](upload_engine/docs/UPLOAD_ASSISTANT.md) — upload metadata
+- [batch_runner/docs/BATCH_GENERATION.md](batch_runner/docs/BATCH_GENERATION.md) — generate many reels sequentially (optional)
 - [docs/CONTENT_LIBRARY.md](docs/CONTENT_LIBRARY.md) · [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - [voice_engine/docs/INSTALLATION.md](voice_engine/docs/INSTALLATION.md) — installing real voice/avatar models (advanced)
 
