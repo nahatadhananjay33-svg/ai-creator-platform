@@ -15,6 +15,7 @@ from foundation.constants.paths import PROJECT_ROOT
 from foundation.logging import get_logger
 from foundation.shared_utils.timing import utc_now_iso
 
+from content_library.index import LibraryIndex, SearchQuery
 from content_library.project import ProjectRecord, make_project_id
 from content_library.store import LibraryStore, read_json, write_json
 
@@ -36,6 +37,7 @@ class ContentLibrary:
         self.store = LibraryStore(root if root is not None else DEFAULT_ROOT)
         self.store.ensure_layout()
         self._clock = clock
+        self.index = LibraryIndex(self.store).load()
 
     @classmethod
     def open(cls, root: Path | str, **kwargs) -> "ContentLibrary":
@@ -106,12 +108,29 @@ class ContentLibrary:
         """Every project, ordered by id (deterministic)."""
         return [self.load(pid) for pid in self.project_ids()]
 
-    # ---- hooks (search index wires in here in M2) ---------------------------
-    def _on_change(self, record: ProjectRecord) -> None:  # overridden by the index mixin
-        pass
+    # ---- search --------------------------------------------------------------
+    def search(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """Deterministic search returning project summaries (see :class:`SearchQuery`).
+
+        Filter by ``title`` (substring), ``tag`` / ``tags`` (membership), ``status``,
+        ``template`` (type), and ``created_*`` / ``modified_*`` ISO date ranges; order
+        with ``sort``. No vector database, no embeddings."""
+        return self.index.search(SearchQuery(**kwargs))
+
+    def find(self, query: SearchQuery) -> list[ProjectRecord]:
+        """Like :meth:`search` but returns full loaded records for a query object."""
+        return [self.load(e["project_id"]) for e in self.index.search(query)]
+
+    def rebuild_index(self) -> None:
+        """Rebuild ``index.json`` by scanning every manifest (self-healing)."""
+        self.index.rebuild()
+
+    # ---- index maintenance hooks --------------------------------------------
+    def _on_change(self, record: ProjectRecord) -> None:
+        self.index.upsert(record.summary())
 
     def _on_delete(self, project_id: str) -> None:
-        pass
+        self.index.remove(project_id)
 
     # ---- time ----------------------------------------------------------------
     def now(self) -> str:

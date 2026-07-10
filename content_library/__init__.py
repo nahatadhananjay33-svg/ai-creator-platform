@@ -16,6 +16,7 @@ Public API (grows across milestones):
 """
 from __future__ import annotations
 
+from content_library.index import LibraryIndex, SearchQuery
 from content_library.library import ContentLibrary, ProjectNotFound
 from content_library.project import (
     STATUSES,
@@ -33,4 +34,6 @@ __all__ = [
     "OutputRef",
     "make_project_id",
     "STATUSES",
+    "SearchQuery",
+    "LibraryIndex",
 ]
