@@ -32,14 +32,25 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
+from foundation.constants.paths import PROJECT_ROOT
+from foundation.exceptions import PlatformError
 from foundation.logging import configure_logging
 from foundation.shared_utils.text import slugify
 
 from creator.config import CreatorConfig, load_creator_config
+from creator.errors import CreatorError
 from creator.paths import Workspace, resolve_workspace
+
+#: Fallback list if the script-template data file cannot be read (kept in sync
+#: with script_engine/prompt_templates/templates.yaml).
+_FALLBACK_TEMPLATES: tuple[str, ...] = (
+    "general", "real_estate", "finance", "medical", "education",
+    "news", "motivational", "talking_head",
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -75,6 +86,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _resolve_config(args: argparse.Namespace) -> CreatorConfig:
     """Load the layered config, then fold in any explicit command-line flags."""
+    if args.config is not None and not Path(args.config).exists():
+        raise CreatorError(
+            f"Config file not found: {args.config}",
+            hint="Check the path, or omit --config to use the built-in defaults.",
+        )
     overrides: dict[str, Any] = {}
     gen: dict[str, Any] = {}
     if args.prompt is not None:
@@ -99,6 +115,83 @@ def _resolve_config(args: argparse.Namespace) -> CreatorConfig:
 def _run_id_for(cfg: CreatorConfig, name: str | None) -> str:
     """A deterministic, filesystem-safe run id (repeat runs reuse the folder)."""
     return slugify(name or cfg.prompt) or "reel"
+
+
+# --------------------------------------------------------------------------- #
+# Pre-flight validation — catch common mistakes before a long render
+# --------------------------------------------------------------------------- #
+def _known_templates() -> tuple[str, ...]:
+    """The content templates a user may pick (read from the data file)."""
+    path = PROJECT_ROOT / "script_engine" / "prompt_templates" / "templates.yaml"
+    try:
+        import yaml
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        names = tuple((data.get("templates") or {}).keys())
+        if names:
+            return names
+    except Exception:
+        pass
+    return _FALLBACK_TEMPLATES
+
+
+def _preflight(cfg: CreatorConfig) -> None:
+    """Validate the request up front, raising :class:`CreatorError` with a hint
+    for the mistakes a user is most likely to make."""
+    if not cfg.prompt.strip():
+        raise CreatorError(
+            "No prompt to generate from.",
+            hint='Pass --prompt "your idea", or set generation.prompt in '
+                 "creator/config.yaml.",
+        )
+
+    templates = _known_templates()
+    if cfg.template not in templates:
+        raise CreatorError(
+            f"Unknown template: {cfg.template!r}.",
+            hint=f"Choose one of: {', '.join(sorted(templates))}.",
+        )
+
+    from reel_engine.exporters.profiles import profile_names
+    known_profiles = profile_names()
+    unknown = [p for p in cfg.profiles if p not in known_profiles]
+    if unknown:
+        raise CreatorError(
+            f"Unknown export profile(s): {', '.join(unknown)}.",
+            hint=f"Choose from: {', '.join(known_profiles)}.",
+        )
+    if not cfg.profiles:
+        raise CreatorError(
+            "No export profiles selected.",
+            hint=f"Pass --profiles with one or more of: {', '.join(known_profiles)}.",
+        )
+
+    if cfg.renderer == "ffmpeg":
+        from reel_engine.render import ffprobe_available
+        if not ffprobe_available():
+            raise CreatorError(
+                "The 'ffmpeg' renderer needs FFmpeg, but ffprobe was not found "
+                "on your PATH.",
+                hint="Install FFmpeg (https://ffmpeg.org/download.html), or use "
+                     "--renderer mock for a fast dependency-free proxy video.",
+            )
+
+
+def _report_error(message: str, hint: str = "") -> int:
+    """Print a clean, actionable error (no traceback) and return exit code 1."""
+    print(f"\nError: {message}", file=sys.stderr)
+    if hint:
+        print(f"Hint:  {hint}", file=sys.stderr)
+    return 1
+
+
+def _hint_for(exc: PlatformError) -> str:
+    """A best-effort hint for a platform error that isn't a CreatorError."""
+    from foundation.exceptions import ConfigError
+
+    if isinstance(exc, ConfigError):
+        return ("Check the YAML syntax and keys in your config file "
+                "(see creator/config.yaml for the expected shape).")
+    return "Re-run with --verbose to see the detailed engine logs."
 
 
 # --------------------------------------------------------------------------- #
@@ -235,8 +328,14 @@ def run(cfg: CreatorConfig, *, name: str | None = None, as_json: bool = False,
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     configure_logging(level=logging.INFO if args.verbose else logging.WARNING)
-    cfg = _resolve_config(args)
-    return run(cfg, name=args.name, as_json=args.json, quiet=args.quiet)
+    try:
+        cfg = _resolve_config(args)
+        _preflight(cfg)
+        return run(cfg, name=args.name, as_json=args.json, quiet=args.quiet)
+    except CreatorError as exc:
+        return _report_error(exc.message, exc.hint)
+    except PlatformError as exc:
+        return _report_error(exc.message, _hint_for(exc))
 
 
 if __name__ == "__main__":
