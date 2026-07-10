@@ -47,6 +47,7 @@ from workflow_engine.validation import (
     validate_run,
     validate_workflow,
 )
+from workflow_engine.timing import StageTiming, WorkflowTiming
 from workflow_engine.stages import (
     DEFAULT_ASSETS,
     AssetsStage,
@@ -85,6 +86,8 @@ __all__ = [
     "StageResult",
     "DependencyGraph",
     "GraphError",
+    "WorkflowTiming",
+    "StageTiming",
     "Presentation",
     "StoryboardStage",
     "ScenePlanningStage",
