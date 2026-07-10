@@ -85,25 +85,38 @@ class ContentPool:
     # ---- mutation ------------------------------------------------------------
     def add(self, name: str, *, source: Path | str | None = None, kind: str = "",
             tags: tuple[str, ...] = (), meta: dict[str, Any] | None = None,
-            item_id: str | None = None, copy: bool = True) -> PoolItem:
+            item_id: str | None = None, copy: bool = True, dedup: bool = True) -> PoolItem:
         """Register an item, optionally copying ``source`` file into the pool.
 
         Metadata-only items (no ``source``) are allowed — a brand kit, a voice
-        profile descriptor, etc. Re-adding the same id overwrites its metadata."""
+        profile descriptor, etc. Re-adding the same id overwrites its metadata.
+
+        Deduplication (Phase C17): when ``dedup`` is on (default) and an existing
+        item already holds a file with the *same content hash*, the new item simply
+        references that stored file instead of writing a second identical copy — so
+        adding the same asset/export twice never duplicates bytes on disk. Removal
+        is reference-counted, so a shared file survives until its last referrer goes.
+        """
         iid = item_id or make_item_id(name, kind)
         rel = ""
         item_meta = dict(meta or {})
         if source is not None:
             src = Path(source)
-            files_dir = self.dir / _FILES_SUBDIR
-            files_dir.mkdir(parents=True, exist_ok=True)
-            dest = files_dir / f"{iid}{src.suffix}"
-            if copy:
-                shutil.copy2(src, dest)
+            content_hash = sha256_file(src)
+            existing = self.find_by_hash(content_hash) if dedup else None
+            if existing is not None:
+                rel = existing.path                       # reuse the stored file (no copy)
+                item_meta.setdefault("dedup_of", existing.item_id)
             else:
-                dest.write_bytes(src.read_bytes())
-            rel = f"{_FILES_SUBDIR}/{dest.name}"
-            item_meta.setdefault("content_hash", sha256_file(dest))
+                files_dir = self.dir / _FILES_SUBDIR
+                files_dir.mkdir(parents=True, exist_ok=True)
+                dest = files_dir / f"{iid}{src.suffix}"
+                if copy:
+                    shutil.copy2(src, dest)
+                else:
+                    dest.write_bytes(src.read_bytes())
+                rel = f"{_FILES_SUBDIR}/{dest.name}"
+            item_meta.setdefault("content_hash", content_hash)
             item_meta.setdefault("source_name", src.name)
         item = PoolItem(item_id=iid, name=name, kind=kind, path=rel,
                         tags=tuple(dict.fromkeys(tags)), meta=item_meta,
@@ -115,7 +128,11 @@ class ContentPool:
     def remove(self, item_id: str) -> None:
         item = self._items.pop(item_id, None)
         if item is not None and item.path:
-            (self.dir / item.path).unlink(missing_ok=True)
+            # Reference-counted: only delete the file when no other item shares it
+            # (deduped items point at the same stored path).
+            shared = any(o.path == item.path for o in self._items.values())
+            if not shared:
+                (self.dir / item.path).unlink(missing_ok=True)
         self._save()
 
     # ---- read ----------------------------------------------------------------
@@ -132,6 +149,18 @@ class ContentPool:
 
     def list(self) -> list[PoolItem]:
         return [self._items[k] for k in sorted(self._items)]
+
+    def find_by_hash(self, content_hash: str) -> PoolItem | None:
+        """The first file-item whose stored content matches ``content_hash``.
+
+        Used for deduplication: returns an existing item (in deterministic id
+        order) whose file is still on disk, or ``None``. Metadata-only items and
+        items whose file has since been removed are ignored."""
+        for it in self.list():
+            if it.path and it.meta.get("content_hash") == content_hash:
+                if (self.dir / it.path).exists():
+                    return it
+        return None
 
     def search(self, *, name: str = "", tag: str = "", kind: str = "") -> list[PoolItem]:
         """Deterministic filter by name substring, tag membership, and kind."""
