@@ -76,12 +76,17 @@ class ScenePlanningStage(WorkflowStage):
     """``AIStoryboard`` -> deterministic Scene-Planner storyboard summary.
 
     Reuses ``EditingEngine.plan_scene_storyboard`` (which itself drives the Scene
-    Engine); emits a JSON summary used for inspection and validation."""
+    Engine); emits a JSON summary used for inspection and validation. Scene planning
+    depends only on the storyboard + brand attribution (creator/channel) — *not* on
+    theme/soundtrack/captions — so those are its only params and a presentation edit
+    never spuriously invalidates it."""
 
-    presentation: Presentation = Presentation()
+    creator: str = ""
+    channel: str = ""
 
     def run(self, ctx):
-        project = base_project(ctx.value("storyboard"), self.presentation)
+        project = base_project(ctx.value("storyboard"),
+                               Presentation(creator=self.creator, channel=self.channel))
         scene_sb = EditingEngine().plan_scene_storyboard(project)
         summary = {
             "n_scenes": scene_sb.n_scenes,
@@ -216,16 +221,18 @@ class MediaIntelligenceStage(WorkflowStage):
 
     Reuses the C13 ``MediaIntelligenceEngine``: builds the registry from the
     ``assets`` artifact, plans over the base project, and lowers the plan's
-    immutable patches to JSON specs (fully resumable)."""
+    immutable patches to JSON specs (fully resumable). Media *recommendations* are
+    content-driven (narration + available assets), independent of the chosen
+    theme/soundtrack, so the stage takes no presentation param — it recommends those
+    choices rather than depending on them."""
 
-    presentation: Presentation = Presentation()
     language: str = "en"
     n_alternatives: int = 2
 
     def run(self, ctx):
         assets_payload = ctx.value("assets")
         registry = AssetRegistry([_asset_from_dict(d) for d in assets_payload["assets"]])
-        project = base_project(ctx.value("storyboard"), self.presentation)
+        project = base_project(ctx.value("storyboard"), Presentation())
         engine = MediaIntelligenceEngine(registry)
         plan = engine.plan(project, language=self.language,
                            n_alternatives=self.n_alternatives)

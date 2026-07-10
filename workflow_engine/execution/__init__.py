@@ -8,6 +8,8 @@ can be skipped.
 from __future__ import annotations
 
 from workflow_engine.execution.executor import DEFAULT_ROOT, WorkflowExecutor
+from workflow_engine.execution.incremental import IncrementalPlan, plan_incremental
 from workflow_engine.execution.journal import RunJournal, StageRecord
 
-__all__ = ["WorkflowExecutor", "DEFAULT_ROOT", "RunJournal", "StageRecord"]
+__all__ = ["WorkflowExecutor", "DEFAULT_ROOT", "RunJournal", "StageRecord",
+           "IncrementalPlan", "plan_incremental"]

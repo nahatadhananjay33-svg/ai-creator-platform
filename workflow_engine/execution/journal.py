@@ -33,6 +33,7 @@ class StageRecord:
     name: str
     status: str
     input_hash: str
+    signature: str = ""
     #: artifact name -> {"descriptor": {...}, "ref": {...codec payload ref...}}
     outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     error: str | None = None
@@ -68,6 +69,7 @@ class RunJournal:
                     name=name,
                     status=rec.get("status", "pending"),
                     input_hash=rec.get("input_hash", ""),
+                    signature=rec.get("signature", ""),
                     outputs=rec.get("outputs", {}),
                     error=rec.get("error"),
                 )
@@ -94,6 +96,16 @@ class RunJournal:
                 if not Path(p).exists():
                     return False
         return True
+
+    def succeeded(self, name: str) -> bool:
+        """True if ``name`` has a prior successful record with its payloads intact."""
+        rec = self.records.get(name)
+        return (rec is not None and rec.status in ("completed", "cached", "skipped")
+                and self.outputs_present(name))
+
+    def signature_of(self, name: str) -> str | None:
+        rec = self.records.get(name)
+        return rec.signature if rec is not None else None
 
     def reusable(self, name: str, input_hash: str) -> bool:
         """A stage is reusable iff it completed before with the same input hash and
@@ -122,24 +134,26 @@ class RunJournal:
 
     # ---- writes --------------------------------------------------------------
     def upsert(self, name: str, status: str, input_hash: str,
-               artifacts: dict[str, Artifact], error: str | None = None) -> None:
+               artifacts: dict[str, Artifact], signature: str = "",
+               error: str | None = None) -> None:
         """Persist a stage's outcome, encoding each artifact via its codec."""
         outputs: dict[str, dict[str, Any]] = {}
         for art_name, art in artifacts.items():
             ref = get_codec(art.kind).encode(art, self.run_dir)
             outputs[art_name] = {"descriptor": art.descriptor(), "ref": ref}
         self.records[name] = StageRecord(name=name, status=status,
-                                         input_hash=input_hash, outputs=outputs,
-                                         error=error)
+                                         input_hash=input_hash, signature=signature,
+                                         outputs=outputs, error=error)
 
     def mark(self, name: str, status: str, input_hash: str = "",
-             error: str | None = None) -> None:
+             signature: str = "", error: str | None = None) -> None:
         """Record a stage outcome that produced no (new) artifacts (e.g. a failure)."""
         rec = self.records.get(name)
         outputs = rec.outputs if rec is not None else {}
         ih = input_hash or (rec.input_hash if rec else "")
-        self.records[name] = StageRecord(name=name, status=status,
-                                         input_hash=ih, outputs=outputs, error=error)
+        sig = signature or (rec.signature if rec else "")
+        self.records[name] = StageRecord(name=name, status=status, input_hash=ih,
+                                         signature=sig, outputs=outputs, error=error)
 
     def save(self, run_id: str, workflow: str) -> Path:
         self.run_id = run_id
@@ -152,6 +166,7 @@ class RunJournal:
                 name: {
                     "status": rec.status,
                     "input_hash": rec.input_hash,
+                    "signature": rec.signature,
                     "outputs": rec.outputs,
                     "error": rec.error,
                 }

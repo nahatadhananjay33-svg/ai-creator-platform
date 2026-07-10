@@ -107,9 +107,11 @@ class WorkflowExecutor:
             status = StageStatus.COMPLETED if sr.status == StageStatus.COMPLETED else sr.status
             produced = {n: ctx.artifact(n) for n in sr.artifacts}
             if status == StageStatus.COMPLETED:
-                journal.upsert(name, status.value, sr.input_hash, produced)
+                journal.upsert(name, status.value, sr.input_hash, produced,
+                               signature=stage.signature())
             else:
-                journal.mark(name, sr.status.value, sr.input_hash, sr.error)
+                journal.mark(name, sr.status.value, sr.input_hash,
+                             signature=stage.signature(), error=sr.error)
             journal.save(run_id, workflow.name)
 
         # Materialize every artifact's value (decoding any reused-from-disk ones)

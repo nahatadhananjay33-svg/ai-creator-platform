@@ -16,6 +16,8 @@ from foundation.shared_utils.text import new_run_id
 
 from workflow_engine.core.workflow import Workflow, WorkflowResult
 from workflow_engine.execution.executor import DEFAULT_ROOT, WorkflowExecutor
+from workflow_engine.execution.incremental import IncrementalPlan, plan_incremental
+from workflow_engine.execution.journal import RunJournal
 from workflow_engine.stages.base import Presentation
 from workflow_engine.stages.pipeline import build_default_workflow
 
@@ -49,6 +51,15 @@ class WorkflowEngine:
                 **kwargs) -> WorkflowResult:
         """Force-rebuild the named stages (and their dependents) for an existing run."""
         return self.executor.run(workflow, run_id=run_id, force=tuple(stages), **kwargs)
+
+    # ---- incremental ---------------------------------------------------------
+    def incremental_plan(self, workflow: Workflow, *, run_id: str,
+                         force: tuple[str, ...] = ()) -> IncrementalPlan:
+        """Predict which stages the next run of ``workflow`` would reuse vs rebuild.
+
+        A pure what-if over the persisted journal — nothing is executed."""
+        journal = RunJournal.load(self.run_dir(run_id))
+        return plan_incremental(workflow, journal, force=force)
 
     # ---- convenience ---------------------------------------------------------
     def produce(self, prompt: str, *, run_id: str | None = None, **options) -> WorkflowResult:
