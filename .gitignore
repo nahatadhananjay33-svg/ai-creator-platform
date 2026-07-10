@@ -44,6 +44,8 @@ archive/
 .claude/*.tmp.*
 
 # --- Platform runtime artifacts (all regenerable — never commit) --------------
+# Version 1.0 single-user workspace (creator.run output: reels, exports, logs).
+workspace/
 foundation/cache/data/
 voice_engine/output/
 avatar_engine/output/

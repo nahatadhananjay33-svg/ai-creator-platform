@@ -1,0 +1,60 @@
+# =============================================================================
+# AI Creator Platform — Version 1.0 configuration
+#
+# This is the ONE file a single-user creator edits. Every option below has a
+# safe default; change only what you need. These values are exactly what
+# `python -m creator.run` uses when you pass no command-line flags.
+#
+# Override precedence (lowest wins to highest wins):
+#   1. these defaults
+#   2. a config file you pass with  --config <file>
+#   3. AICP__<section>__<key>=<value> environment variables
+#      e.g.  AICP__generation__renderer=ffmpeg
+#   4. explicit command-line flags  (--prompt, --renderer, --template, ...)
+# =============================================================================
+
+# --- What to generate --------------------------------------------------------
+generation:
+  # The idea for your reel. The Script Engine turns this into a storyboard.
+  prompt: "Why investing in real estate early is beneficial"
+
+  # Content vertical template. Drives the script's tone AND the style of the
+  # upload metadata (titles, hashtags, captions).
+  # One of: real_estate, finance, education, medical, general
+  template: "real_estate"
+
+  # Renderer:
+  #   mock   -> fast, dependency-free proxy video (perfect for trying the
+  #             platform and for tests — no GPU, no FFmpeg, no network).
+  #   ffmpeg -> real .mp4 files (requires FFmpeg installed on your PATH).
+  renderer: "mock"
+
+  # Export aspect ratios to produce. Pick any combination:
+  #   reel_9x16      -> 1080x1920 vertical (Reels / Shorts / TikTok)
+  #   square_1x1     -> 1080x1080 square (feed posts)
+  #   landscape_16x9 -> 1920x1080 (YouTube)
+  profiles:
+    - "reel_9x16"
+    - "square_1x1"
+
+  # Narration + caption language (ISO code): en, hi, ...
+  language: "en"
+
+# --- Who it's for (shown in captions + baked into upload metadata) -----------
+branding:
+  creator: ""    # your name or brand, e.g. "Acme Realty"
+  channel: ""    # your handle, e.g. "@acmerealty"
+
+# --- Quality gate ------------------------------------------------------------
+quality:
+  # When true, `creator.run` refuses to write upload metadata unless the reel
+  # passes the deterministic Quality Check. Set false to always write metadata
+  # (the quality report is still printed).
+  gate: true
+
+# --- Where files go ----------------------------------------------------------
+paths:
+  # Workspace root. Leave empty to use "<repo>/workspace". All standardized
+  # subfolders (projects, exports, cache, assets, voices, avatars, music, logs)
+  # are created automatically on first run.
+  root: ""

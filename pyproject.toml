@@ -59,6 +59,7 @@ packages = { find = { include = [
     "quality_engine*",
     "upload_engine*",
     "reel_engine*",
+    "creator*",
     "export*",
 ] } }
 
