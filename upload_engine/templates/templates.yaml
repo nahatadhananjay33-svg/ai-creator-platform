@@ -1,0 +1,62 @@
+# Upload Assistant templates (Phase C18) — one per content vertical.
+#
+# Each template shapes the upload-ready metadata generated from a FINISHED reel:
+# the hashtags to append, a lead emoji, per-platform call-to-action lines, and how
+# short the thumbnail text is. A template supplies *presentation* only — the
+# words come from the reel's own storyboard (title / hook / narration / keywords).
+#
+# `defaults` is the base every vertical inherits; each entry under `templates`
+# overrides just the fields it cares about. `hashtags` are MERGED (the vertical's
+# tags first, then the defaults'), everything else is replaced. Adding or tuning a
+# vertical is a YAML edit — no code change — and every template yields the SAME
+# metadata shape, so all verticals stay interchangeable.
+
+defaults:
+  emoji: "🎬"
+  # Generic, platform-agnostic tags appended after the vertical + topic tags.
+  hashtags: [reels, shorts, viral, trending, fyp]
+  youtube_cta: "👍 Like and subscribe for more."
+  instagram_cta: "Follow for more! 💾 Save this for later."
+  facebook_cta: "Follow our page for more like this."
+  linkedin_cta: "Follow for more insights like this."
+  # Thumbnail text is a short punchy phrase drawn from the title/hook.
+  thumbnail_max_words: 4
+  # Upper bound on how many hashtags any single caption carries.
+  hashtag_limit: 15
+
+templates:
+  general:
+    emoji: "🎬"
+    hashtags: [tips, howto, learn, explained, didyouknow]
+
+  real_estate:
+    emoji: "🏡"
+    hashtags: [realestate, property, investing, realtor, homebuying, wealth]
+    youtube_cta: "🏡 Subscribe for more real-estate tips."
+    instagram_cta: "Follow for daily property insights! 🏡"
+    facebook_cta: "Follow our page for real-estate tips and market updates."
+    linkedin_cta: "Follow for real-estate market insights and analysis."
+
+  finance:
+    emoji: "💰"
+    hashtags: [finance, investing, money, wealth, personalfinance, stocks]
+    youtube_cta: "💰 Subscribe for more money tips."
+    instagram_cta: "Follow for daily finance tips! 💰 Not financial advice."
+    facebook_cta: "Follow our page for personal-finance tips."
+    linkedin_cta: "Follow for markets and personal-finance insights."
+
+  education:
+    emoji: "📚"
+    hashtags: [education, learning, study, knowledge, students, edutok]
+    youtube_cta: "📚 Subscribe to keep learning."
+    instagram_cta: "Follow to learn something new every day! 📚"
+    facebook_cta: "Follow our page for bite-sized lessons."
+    linkedin_cta: "Follow for practical learning and skills."
+
+  medical:
+    emoji: "🩺"
+    hashtags: [health, wellness, healthcare, healthtips, medical, healthyliving]
+    youtube_cta: "🩺 Subscribe for more health tips."
+    instagram_cta: "Follow for daily health tips! 🩺 Educational only — not medical advice."
+    facebook_cta: "Follow our page for health and wellness tips."
+    linkedin_cta: "Follow for health and wellness insights."
