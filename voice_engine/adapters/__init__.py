@@ -9,7 +9,11 @@ from voice_engine.adapters.base import BaseVoiceAdapter
 from voice_engine.adapters.registry import (
     ADAPTER_CLASSES,
     available_adapter_ids,
+    cached_adapter_count,
+    clear_adapter_cache,
     create_adapter,
+    forget_cached_adapter,
+    get_or_create_adapter,
     register_all_specs,
 )
 
@@ -18,5 +22,9 @@ __all__ = [
     "ADAPTER_CLASSES",
     "available_adapter_ids",
     "create_adapter",
+    "get_or_create_adapter",
+    "forget_cached_adapter",
+    "clear_adapter_cache",
+    "cached_adapter_count",
     "register_all_specs",
 ]

@@ -32,7 +32,12 @@ from typing import Any, AsyncIterator, Iterator
 from foundation.constants import AudioFormat, Language
 from foundation.exceptions import ModelError
 from foundation.logging import get_logger
-from voice_engine.adapters import ADAPTER_CLASSES, available_adapter_ids, create_adapter
+from voice_engine.adapters import (
+    ADAPTER_CLASSES,
+    available_adapter_ids,
+    forget_cached_adapter,
+    get_or_create_adapter,
+)
 from voice_engine.adapters.base import BaseVoiceAdapter
 from voice_engine.emotion import EmotionManager, EmotionSpec, resolve_emotion
 from voice_engine.interfaces import (
@@ -117,7 +122,10 @@ class VoiceEngine:
         model_id = model_id or self.config.engine.default_model
         adapter = self._engines.get(model_id)
         if adapter is None:
-            adapter = create_adapter(
+            # Reuse an already-loaded adapter from the process-global cache when one
+            # exists (avoids reloading weights across VoiceEngine instances); falls
+            # back to constructing a fresh adapter otherwise (Phase C17).
+            adapter = get_or_create_adapter(
                 model_id,
                 device=device or self.config.engine.device,
                 config=(
@@ -144,6 +152,7 @@ class VoiceEngine:
         adapter = self._engines.pop(model_id, None)
         if adapter is not None:
             adapter.unload()
+            forget_cached_adapter(adapter)   # unload truly forgets it (Phase C17)
         if self._active_model == model_id:
             self._active_model = None
 
