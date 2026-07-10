@@ -54,6 +54,7 @@ packages = { find = { include = [
     "editing_engine*",
     "creator_studio*",
     "media_intelligence*",
+    "workflow_engine*",
     "reel_engine*",
     "export*",
 ] } }
