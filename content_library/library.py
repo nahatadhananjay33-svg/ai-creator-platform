@@ -16,8 +16,12 @@ from foundation.logging import get_logger
 from foundation.shared_utils.timing import utc_now_iso
 
 from content_library.index import LibraryIndex, SearchQuery
+from content_library.pools import ContentPool
 from content_library.project import ProjectRecord, make_project_id
 from content_library.store import LibraryStore, read_json, write_json
+
+#: The content pools the library manages (besides projects).
+POOL_NAMES = ("assets", "voices", "avatars", "music", "brands", "exports")
 
 logger = get_logger("content_library")
 
@@ -38,6 +42,9 @@ class ContentLibrary:
         self.store.ensure_layout()
         self._clock = clock
         self.index = LibraryIndex(self.store).load()
+        #: managed content pools (assets/voices/avatars/music/brands/exports)
+        self.pools: dict[str, ContentPool] = {
+            name: ContentPool(name, self.store, clock=clock) for name in POOL_NAMES}
 
     @classmethod
     def open(cls, root: Path | str, **kwargs) -> "ContentLibrary":
@@ -124,6 +131,38 @@ class ContentLibrary:
     def rebuild_index(self) -> None:
         """Rebuild ``index.json`` by scanning every manifest (self-healing)."""
         self.index.rebuild()
+
+    # ---- content pools -------------------------------------------------------
+    def pool(self, name: str) -> ContentPool:
+        """Access a managed content pool by name (assets/voices/…/exports)."""
+        try:
+            return self.pools[name]
+        except KeyError:
+            raise KeyError(f"unknown pool {name!r} (known: {list(self.pools)})") from None
+
+    @property
+    def assets(self) -> ContentPool:
+        return self.pools["assets"]
+
+    @property
+    def voices(self) -> ContentPool:
+        return self.pools["voices"]
+
+    @property
+    def avatars(self) -> ContentPool:
+        return self.pools["avatars"]
+
+    @property
+    def music(self) -> ContentPool:
+        return self.pools["music"]
+
+    @property
+    def brands(self) -> ContentPool:
+        return self.pools["brands"]
+
+    @property
+    def exports(self) -> ContentPool:
+        return self.pools["exports"]
 
     # ---- index maintenance hooks --------------------------------------------
     def _on_change(self, record: ProjectRecord) -> None:

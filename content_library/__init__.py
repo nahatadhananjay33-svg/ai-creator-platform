@@ -17,7 +17,8 @@ Public API (grows across milestones):
 from __future__ import annotations
 
 from content_library.index import LibraryIndex, SearchQuery
-from content_library.library import ContentLibrary, ProjectNotFound
+from content_library.library import POOL_NAMES, ContentLibrary, ProjectNotFound
+from content_library.pools import ContentPool, PoolItem, make_item_id
 from content_library.project import (
     STATUSES,
     OutputRef,
@@ -36,4 +37,8 @@ __all__ = [
     "STATUSES",
     "SearchQuery",
     "LibraryIndex",
+    "ContentPool",
+    "PoolItem",
+    "make_item_id",
+    "POOL_NAMES",
 ]
