@@ -51,6 +51,7 @@ reel_engine/orchestrator/output/
 voice_engine/voices/profiles/
 content_library/data/
 content_library/demo_data/
+quality_engine/demo_data/
 **/output/runs/
 **/output/installs/
 **/output/validation/
