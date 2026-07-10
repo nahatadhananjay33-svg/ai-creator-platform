@@ -1,0 +1,26 @@
+# Sample batch of 5 reels for `python -m batch_runner.run` (Phase C20).
+#
+#   python -m batch_runner.run batch_runner/examples/sample_reels.yaml
+#
+# Each entry needs a prompt; template and output are optional (output defaults
+# to a slug of the prompt and must be unique across the batch).
+reels:
+  - prompt: "Why investing in real estate early is beneficial"
+    template: real_estate
+    output: real_estate_intro
+
+  - prompt: "3 mistakes new investors make"
+    template: finance
+    output: finance_mistakes
+
+  - prompt: "How compound interest works"
+    template: education
+    output: compound_interest
+
+  - prompt: "Morning habits of successful creators"
+    template: motivational
+    output: morning_habits
+
+  - prompt: "A quick tour of our newest listing"
+    template: real_estate
+    output: new_listing_tour
