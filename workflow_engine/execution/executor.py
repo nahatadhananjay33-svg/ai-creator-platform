@@ -129,6 +129,11 @@ class WorkflowExecutor:
         """Alias for :meth:`run` — the same call resumes an existing ``run_id``."""
         return self.run(workflow, run_id=run_id, **kwargs)
 
+    def rebuild(self, workflow: Workflow, *, run_id: str, stages: Iterable[str],
+                **kwargs) -> WorkflowResult:
+        """Force-rebuild the named stages (and their dependents) for an existing run."""
+        return self.run(workflow, run_id=run_id, force=tuple(stages), **kwargs)
+
     def run_dir(self, run_id: str) -> Path:
         """The directory that holds ``run_id``'s journal and artifact payloads."""
         return self.root / run_id

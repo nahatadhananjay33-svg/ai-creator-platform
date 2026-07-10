@@ -60,7 +60,7 @@ packages = { find = { include = [
 ] } }
 
 [tool.pytest.ini_options]
-testpaths = ["foundation/tests", "voice_engine/tests", "avatar_engine/tests", "caption_engine/tests", "scene_engine/tests", "music_engine/tests", "script_engine/tests", "editing_engine/tests", "creator_studio/tests", "media_intelligence/tests"]
+testpaths = ["foundation/tests", "voice_engine/tests", "avatar_engine/tests", "caption_engine/tests", "scene_engine/tests", "music_engine/tests", "script_engine/tests", "editing_engine/tests", "creator_studio/tests", "media_intelligence/tests", "workflow_engine/tests"]
 addopts = "-q"
 markers = [
     "integration: end-to-end test exercising real engines (may need ffmpeg/models)",

@@ -19,8 +19,8 @@ import tempfile
 from foundation.benchmarking import BenchmarkCase, CaseResult, Measurement
 from foundation.shared_utils import Stopwatch
 
-from workflow_engine.core.stage import StageStatus
 from workflow_engine.engine import WorkflowEngine
+from workflow_engine.stages.base import Presentation
 from workflow_engine.benchmark.config import REPORTED_STAGES, WorkflowBenchmarkConfig
 
 
@@ -51,7 +51,7 @@ class WorkflowBenchmarkCase(BenchmarkCase):
         with Stopwatch() as sw_build:
             wf = engine.build(cfg.prompt, template=cfg.template, provider=cfg.provider,
                               voice_model=cfg.voice_model, renderer=cfg.renderer,
-                              profiles=cfg.profiles)
+                              profiles=cfg.profiles, presentation=Presentation(fps=cfg.fps))
             valid = engine.validate(wf).ok
         startup_s = sw_build.elapsed_s
         n_stages = len(wf.order())
