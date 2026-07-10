@@ -41,6 +41,10 @@ from quality_engine.checker import (
     inspect_reel,
     run_checks,
 )
+from quality_engine.workflow_link import (
+    artifacts_from_result,
+    check_workflow_result,
+)
 
 __version__ = "1.0.0"
 
@@ -58,4 +62,6 @@ __all__ = [
     "inspect_reel",
     "run_checks",
     "CHECKS",
+    "check_workflow_result",
+    "artifacts_from_result",
 ]
