@@ -356,6 +356,11 @@ class MockRenderer(TimelineRenderer):
             frames = self._overlay_captions(frames, w, h, fps, tl)
             frames = self._overlay_branding(frames, w, h, fps, tl)
             write_raw_avi(out, VideoFrames(frames=frames, width=w, height=h, fps=float(fps)))
+            # The master frame list (the render's largest allocation) is done once
+            # written — release it before building any export renditions so peak RAM
+            # is one frame list, not the master's plus an export's (Phase C17).
+            total_frames = len(frames)
+            del frames, base_frames
 
             audio_path = self._write_audio(out.with_suffix(".wav"), tl)
             captions_path = self._write_captions(out.with_suffix(".srt"), tl)
@@ -379,11 +384,12 @@ class MockRenderer(TimelineRenderer):
                 write_raw_avi(ex_path, VideoFrames(ex_frames, ew, eh, float(fps)))
                 exports.append(ExportOutput(profile=name, path=ex_path,
                                             width=ew, height=eh, aspect=prof.aspect))
+                del ex_frames, scaled_cache   # free each rendition before the next
         return RenderResult(
             output_path=out, width=w, height=h, fps=float(fps),
             duration_s=tl.duration_s, n_scenes=tl.n_scenes, renderer=self.name,
             render_time_s=round(sw.elapsed_s, 4), timeline_hash=timeline_content_hash(tl),
             exports=tuple(exports), audio_path=audio_path, captions_path=captions_path,
             metadata={"proxy": True, "base_resolution": [tl.meta.width, tl.meta.height],
-                      "total_frames": len(frames), "music": tl.has_music},
+                      "total_frames": total_frames, "music": tl.has_music},
         )
