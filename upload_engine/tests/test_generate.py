@@ -83,6 +83,19 @@ def test_suggested_filename_is_slug_mp4(summary):
     assert " " not in md.suggested_filename
 
 
+def test_hook_not_duplicated_when_it_is_the_first_narration():
+    # The mock provider uses the hook as the first scene's narration.
+    from upload_engine.tests.conftest import StubScene, StubStoryboard
+    sb = StubStoryboard(
+        hook="Start earlier than you think.",
+        scenes=(StubScene("Start earlier than you think.", keywords=("money",)),
+                StubScene("Compounding does the heavy lifting.")),
+    )
+    md = generate_metadata(ReelSummary.from_storyboard(sb))
+    # the hook line appears exactly once in the YouTube description
+    assert md.youtube_description.count("Start earlier than you think.") == 1
+
+
 def test_template_shapes_ctas(summary):
     md = generate_metadata(summary, template="real_estate")
     assert "real-estate" in md.youtube_description.lower()

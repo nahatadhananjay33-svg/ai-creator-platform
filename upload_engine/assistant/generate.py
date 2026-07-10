@@ -27,13 +27,23 @@ def _join_blocks(*blocks: str) -> str:
     return "\n\n".join(b for b in (b.strip() for b in blocks) if b)
 
 
-def _body(summary: ReelSummary, n: int) -> str:
-    """The first ``n`` narration lines as a block (falls back to hook/topic)."""
-    lines = list(summary.narration[:n])
+def _body_lines(summary: ReelSummary, n: int, *, exclude: str = "") -> list[str]:
+    """Up to ``n`` narration lines, dropping any that duplicate ``exclude``.
+
+    The mock provider uses the hook as the first scene's narration, so excluding
+    the hook line keeps it from appearing twice in a caption. Falls back to the
+    hook/topic when there is no narration."""
+    key = exclude.strip().casefold()
+    lines = [ln for ln in summary.narration if ln.strip().casefold() != key][:n]
     if not lines:
         fallback = summary.hook or summary.topic
         lines = [fallback] if fallback else []
-    return "\n".join(lines)
+    return lines
+
+
+def _body(summary: ReelSummary, n: int, *, exclude: str = "") -> str:
+    """The body narration as a block (see :func:`_body_lines`)."""
+    return "\n".join(_body_lines(summary, n, exclude=exclude))
 
 
 def _hook_line(summary: ReelSummary) -> str:
@@ -49,9 +59,10 @@ def youtube_title(summary: ReelSummary, config: UploadConfig) -> str:
 
 def youtube_description(summary: ReelSummary, template: UploadTemplate,
                         config: UploadConfig, hashtags: tuple[str, ...]) -> str:
+    hook = _hook_line(summary)
     return _join_blocks(
-        _hook_line(summary),
-        _body(summary, config.description_body_lines),
+        hook,
+        _body(summary, config.description_body_lines, exclude=hook),
         template.youtube_cta,
         " ".join(hashtags),
     )
@@ -59,9 +70,10 @@ def youtube_description(summary: ReelSummary, template: UploadTemplate,
 
 def instagram_caption(summary: ReelSummary, template: UploadTemplate,
                       config: UploadConfig, hashtags: tuple[str, ...]) -> str:
+    hook = _hook_line(summary)
     caption = _join_blocks(
-        f"{template.emoji} {_hook_line(summary)}".strip(),
-        _body(summary, config.caption_body_lines),
+        f"{template.emoji} {hook}".strip(),
+        _body(summary, config.caption_body_lines, exclude=hook),
         template.instagram_cta,
         " ".join(hashtags),
     )
@@ -70,9 +82,10 @@ def instagram_caption(summary: ReelSummary, template: UploadTemplate,
 
 def facebook_caption(summary: ReelSummary, template: UploadTemplate,
                      config: UploadConfig, hashtags: tuple[str, ...]) -> str:
+    hook = _hook_line(summary)
     return _join_blocks(
-        _hook_line(summary),
-        _body(summary, config.caption_body_lines),
+        hook,
+        _body(summary, config.caption_body_lines, exclude=hook),
         template.facebook_cta,
         " ".join(hashtags[:config.facebook_hashtag_max]),
     )
@@ -80,11 +93,12 @@ def facebook_caption(summary: ReelSummary, template: UploadTemplate,
 
 def linkedin_post(summary: ReelSummary, template: UploadTemplate,
                   config: UploadConfig, hashtags: tuple[str, ...]) -> str:
-    takeaways = summary.narration[:config.description_body_lines]
+    hook = _hook_line(summary)
+    takeaways = _body_lines(summary, config.description_body_lines, exclude=hook)
     bullets = "\n".join(f"• {line}" for line in takeaways)
     body = f"Key takeaways:\n{bullets}" if bullets else _body(summary, config.caption_body_lines)
     return _join_blocks(
-        _hook_line(summary),
+        hook,
         body,
         template.linkedin_cta,
         " ".join(hashtags[:config.linkedin_hashtag_max]),
