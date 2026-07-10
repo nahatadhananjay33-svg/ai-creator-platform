@@ -1,182 +1,269 @@
-# AI Creator Platform
+# AI Creator Platform — Version 1.0
 
-A modular platform for AI-driven content generation and voice AI. It is built
-as a set of independent **engines** on top of a shared **foundation**, so each
-capability (voice, avatar, script, captions, reels) can be researched,
-benchmarked, and productionised without entangling the others.
+Turn one line of text into an upload-ready social reel with a single command:
 
-**Target use cases**
+```bash
+python -m creator.run --prompt "5 tips for first-time home buyers"
+```
 
-- Instagram Reels / YouTube video generation
-- Talking-avatar videos and digital influencers
-- Real-estate voice AI agents (calls, WhatsApp voice)
-- Multilingual content (English / Hindi / Hinglish / Bengali)
+That one command runs the whole pipeline end to end and leaves you with a
+finished reel **and** the captions/hashtags to post it:
 
-> **Model stack status (as of Phase A3.6):** the production model stack is
-> **not yet frozen** — it is blocked on a GPU benchmark pass that adequate
-> hardware can run. The *framework* is production-ready; only the final model
-> selection awaits measured GPU data. See
-> [`docs/PRODUCTION_STACK.md`](docs/PRODUCTION_STACK.md) and
-> [`docs/PHASE_A36_REPORT.md`](docs/PHASE_A36_REPORT.md).
+```
+Prompt  →  Workflow  →  Quality  →  Upload Metadata  →  Finished
+```
+
+Version 1.0 is deliberately **single-user and local**: it runs in **VS Code** or
+**Google Colab**, needs no cloud, no accounts, and no API keys. It never posts
+anything anywhere — it writes files you copy into each platform yourself.
+
+- **Instagram Reels / YouTube Shorts / TikTok** vertical videos
+- **Square** feed posts and **landscape** YouTube renditions
+- Deterministic, hermetic **`mock` renderer** (no GPU/FFmpeg) for trying it out,
+  plus a real **`ffmpeg` renderer** for shareable MP4s
+- Upload-ready **titles, descriptions, captions, and hashtags** per platform
 
 ---
 
-## Folder architecture
+## Contents
+
+1. [Requirements](#requirements)
+2. [Installation](#installation)
+3. [Quick Start](#quick-start)
+4. [Generate your first reel](#generate-your-first-reel)
+5. [Configuration](#configuration)
+6. [The workflow](#the-workflow)
+7. [Troubleshooting](#troubleshooting)
+8. [Project layout](#project-layout)
+9. [Documentation](#documentation)
+10. [Scope](#scope)
+
+---
+
+## Requirements
+
+- **Python ≥ 3.10**
+- The core install has **no heavy ML dependencies** — it installs and runs
+  without a GPU or any model weights.
+- **FFmpeg** is optional. You only need it for the real-video `--renderer ffmpeg`
+  path; the default `mock` renderer needs nothing extra.
+
+---
+
+## Installation
+
+### VS Code / local
+
+```bash
+# from the repo root
+python -m venv .venv
+source .venv/bin/activate        # Windows Git Bash: source .venv/Scripts/activate
+pip install -e .[dev]            # core only — no GPU, no model weights
+
+pytest                           # optional: verify the suite is green
+```
+
+### Google Colab
+
+```python
+!git clone https://github.com/<your-username>/ai-creator-platform.git
+%cd ai-creator-platform
+!pip install -e .[dev]
+
+!python -m creator.run --prompt "Why compounding is a superpower" --template finance
+```
+
+Colab storage is ephemeral — the generated `workspace/` is git-ignored and will
+not persist between sessions. Download anything you want to keep.
+
+---
+
+## Quick Start
+
+```bash
+# 1) Generate a reel with the built-in defaults (hermetic mock renderer)
+python -m creator.run
+
+# 2) Your own idea + content vertical
+python -m creator.run --prompt "3 mistakes new investors make" --template finance
+
+# 3) Real MP4s instead of the mock proxy (needs FFmpeg installed)
+python -m creator.run --renderer ffmpeg
+
+# 4) See all options
+python -m creator.run --help
+```
+
+Every run prints its four steps and finishes with the title, hashtags, and the
+folder that holds everything you need to upload:
+
+```
+[1/4] Workflow  — generating the reel …
+[2/4] Quality   — checking the reel …        PASS
+[3/4] Upload    — writing upload-ready metadata …
+[4/4] Finished
+
+Title    : 3 mistakes new investors make
+Hashtags : #investing #finance #money …
+Exports  : workspace/exports/3-mistakes-new-investors-make
+
+=== DONE (mock) — your reel is ready to upload ===
+```
+
+---
+
+## Generate your first reel
+
+1. Run the command:
+
+   ```bash
+   python -m creator.run --prompt "Why investing in real estate early is beneficial" \
+       --template real_estate
+   ```
+
+2. Everything lands in one standardized **workspace** (created automatically):
+
+   ```
+   workspace/
+     projects/   the full run for each reel (storyboard → voice → render)
+     exports/    ← your finished, upload-ready bundle lives here
+     cache/      reusable intermediate artifacts (safe to delete)
+     assets/  voices/  avatars/  music/     your input material
+     logs/       per-run logs
+   ```
+
+3. Open **`workspace/exports/<your-prompt-slug>/`**. It contains:
+
+   | File | What it is |
+   | --- | --- |
+   | `master__reel_9x16.*` | the vertical Reels/Shorts/TikTok rendition |
+   | `master__square_1x1.*` | the square feed rendition |
+   | `metadata.json` | machine-readable titles / captions / hashtags |
+   | `upload_preview.md` | copy-paste-ready text for each platform |
+
+4. Open `upload_preview.md`, copy the caption for your platform, upload the
+   matching video, and you're done.
+
+---
+
+## Configuration
+
+Everything a single user touches lives in **one documented file**,
+[`creator/config.yaml`](creator/config.yaml). Every option has a safe default;
+change only what you need.
+
+| Section | Option | Meaning |
+| --- | --- | --- |
+| `generation` | `prompt` | the idea for your reel |
+| | `template` | content vertical: `general`, `real_estate`, `finance`, `education`, `medical`, `news`, `motivational`, `talking_head` |
+| | `renderer` | `mock` (fast, no deps) or `ffmpeg` (real MP4s) |
+| | `profiles` | aspect ratios: `reel_9x16`, `square_1x1`, `landscape_16x9` |
+| | `language` | narration/caption language (`en`, `hi`, …) |
+| `branding` | `creator`, `channel` | your name/handle, shown in captions + metadata |
+| `quality` | `gate` | refuse to write metadata unless the reel passes the quality check |
+| `paths` | `root` | workspace location (empty → `<repo>/workspace`) |
+
+**Four ways to set any option, lowest priority to highest:**
+
+1. the defaults in `creator/config.yaml`
+2. a config file you pass with `--config my_channel.yaml`
+3. an environment variable, e.g. `AICP__generation__renderer=ffmpeg`
+4. an explicit CLI flag, e.g. `--renderer ffmpeg`
+
+```bash
+# save your channel's settings once, reuse them everywhere
+python -m creator.run --config my_channel.yaml
+```
+
+> The per-engine `defaults.yaml` files (script, voice, captions, branding,
+> music, …) remain the advanced layer beneath this; a Version 1.0 user never
+> needs to touch them.
+
+---
+
+## The workflow
+
+`python -m creator.run` composes four existing subsystems — it adds no new
+generation logic of its own:
+
+| Step | Engine | What happens |
+| --- | --- | --- |
+| **Prompt → Workflow** | Workflow Engine | builds the reel through a deterministic 10-stage DAG: storyboard → scene plan → voice → avatar → assets → media intelligence → editing → timeline → render → export |
+| **Quality** | Quality Engine | deterministic PASS/FAIL checks (video present, duration, aspect, audio, captions, exports). With `quality.gate` on, a FAIL stops here |
+| **Upload Metadata** | Upload Assistant | writes `metadata.json` + `upload_preview.md` from the reel's storyboard |
+| **Finished** | — | copies the finished renditions next to their metadata in `workspace/exports/` |
+
+**Renderers.** `mock` produces a deterministic, dependency-free proxy video
+(great for trying the platform and for tests). `ffmpeg` produces real `.mp4`
+files and requires FFmpeg on your PATH.
+
+**Determinism.** The same prompt reuses the same `projects/<slug>` run folder, so
+re-runs are content-addressed and reproducible.
+
+---
+
+## Troubleshooting
+
+The command fails fast with a plain `Error:`/`Hint:` for common mistakes — no
+stack traces.
+
+| Message | Fix |
+| --- | --- |
+| `No prompt to generate from.` | pass `--prompt "your idea"` or set `generation.prompt` in the config |
+| `Unknown template: '…'` | use one of the listed templates (e.g. `real_estate`, `finance`) |
+| `Unknown export profile(s): …` | use `reel_9x16`, `square_1x1`, and/or `landscape_16x9` |
+| `The 'ffmpeg' renderer needs FFmpeg …` | install FFmpeg, or use `--renderer mock` |
+| `Config file not found: …` | check the `--config` path, or omit it to use defaults |
+| `the reel did not pass the quality check` | adjust the prompt/template, or pass `--no-quality-gate` to write metadata anyway |
+
+Re-run with `--verbose` to see the detailed engine logs for anything unexpected.
+
+---
+
+## Project layout
+
+The platform is a set of independent **engines** on a shared **foundation**;
+`creator/` is the Version 1.0 usability layer that ties them together.
 
 | Path | Purpose |
 | --- | --- |
-| `foundation/` | Shared production infrastructure: config, logging, caching, model manager, hardware/environment probing, benchmarking runner, reporting, shared utils. Every engine depends on this and nothing else. |
-| `voice_engine/` | Voice cloning / TTS: adapters, multilingual datasets, benchmark, evaluation, reporting, streaming, pronunciation, cloning. |
-| `avatar_engine/` | Talking avatars: face generation, lip sync, motion, image consistency, model research catalog, benchmark + evaluation. |
-| `script_engine/` | Script generation (planned). |
-| `caption_engine/` | Captioning (planned). |
-| `reel_engine/` | Automatic reel assembly (planned). |
-| `export/` | Final media export (planned). |
-| `benchmark/` | Cross-engine benchmark entry points. |
-| `demos/`, `notebooks/` | Exploration only — never imported by production code. |
-| `docs/` | Platform architecture, phase reports, hardware & production-stack docs. |
-| `.venvs/` | Per-model isolated virtual environments (git-ignored, machine-local). |
-| `archive/` | Superseded/regenerable reports (git-ignored). |
+| `creator/` | **Version 1.0 front door**: the single `run` command, workspace, and config |
+| `foundation/` | shared infrastructure: config loader, logging, caching, paths, exceptions |
+| `script_engine/` | prompt → validated storyboard |
+| `scene_engine/` | storyboard → scene plan + timing |
+| `voice_engine/` | narration (TTS / voice cloning) |
+| `avatar_engine/` | talking-avatar research + planning |
+| `asset_engine/` · `media_intelligence/` | asset resolution + content-driven editing |
+| `editing_engine/` · `caption_engine/` · `branding_engine/` · `music_engine/` | timeline composition |
+| `reel_engine/` | rendering (mock + FFmpeg) and per-platform export profiles |
+| `workflow_engine/` | the deterministic prompt-to-export orchestrator |
+| `quality_engine/` | deterministic reel quality checks |
+| `upload_engine/` | upload-ready metadata generation |
+| `content_library/` | local single-user project + content store |
+| `docs/` | architecture and per-engine documentation |
 
-**Engineering rules** (kept from Phase A1):
-
-1. Engines depend on `foundation/`, never on each other's internals — only on
-   published interfaces (`*_engine/interfaces/`).
-2. No benchmark-only code: benchmarks orchestrate real production modules.
-3. Configuration-driven: behaviour changes via YAML in `foundation/config/`
-   and engine configs, not code edits.
-4. Heavy ML dependencies are optional extras; the core installs and tests
-   without a GPU or any model weights.
+**Engineering rules:** engines depend on `foundation/`, never on each other's
+internals; behaviour is configuration-driven; heavy ML deps are optional extras
+so the core installs and tests with no GPU.
 
 ---
 
-## Completed phases
+## Documentation
 
-| Phase | Title | Outcome |
-| --- | --- | --- |
-| **A1** | Voice Cloning Research & Platform Foundation | Foundation + Voice Engine research/benchmark framework; multilingual datasets; single- vs dual-model recommendation. |
-| **A1.5** | Model Integration, Installation & Scientific Validation | Real voice adapters installed into isolated venvs; CPU-measured validation. |
-| **A2** | Production Voice Engine (readiness) | Verdict: ready to start; reuse map defined. |
-| **A3.5** | Avatar Model Installation & Scientific Validation | Avatar framework + real adapters (SadTalker, LivePortrait); one real CPU generation path (SadTalker, offline batch). |
-| **A3.6** | GPU Validation & Production Stack Freeze | **Blocked by hardware** — the available GPU (GTX 1050, 3 GB, driver 451.67) is not CUDA-usable and below every model's VRAM/RAM floor. No GPU benchmark could run; production stack not frozen. Framework confirmed sound. |
-
-Full reports live in [`docs/`](docs/).
+- [docs/VERSION_1.md](docs/VERSION_1.md) — **the Version 1.0 platform summary (start here)**
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — platform architecture and reuse map
+- [docs/WORKFLOW_ENGINE.md](docs/WORKFLOW_ENGINE.md) — the deterministic orchestrator
+- [quality_engine/docs/QUALITY_ENGINE.md](quality_engine/docs/QUALITY_ENGINE.md) — the quality checks
+- [upload_engine/docs/UPLOAD_ASSISTANT.md](upload_engine/docs/UPLOAD_ASSISTANT.md) — upload metadata
+- [docs/CONTENT_LIBRARY.md](docs/CONTENT_LIBRARY.md) · [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
+- [voice_engine/docs/INSTALLATION.md](voice_engine/docs/INSTALLATION.md) — installing real voice/avatar models (advanced)
 
 ---
 
-## Current roadmap
+## Scope
 
-1. **Complete the A3.6 GPU freeze** on adequate hardware (see below): run the
-   existing voice + avatar suites `--device cuda`, then freeze the production
-   stack from measured data.
-2. **Phase A4 — Production Avatar Engine**: begins once at least one avatar
-   model has a measured GPU benchmark (identity / lip-sync / motion / long-form).
-3. **Phase A5 — Reel assembly**: compose voice + avatar + captions into reels.
+**Version 1.0 is intentionally small and local.** In scope: one creator, one
+machine (VS Code or Colab), one reel per command, no cloud.
 
-The framework and benchmark suites are ready to run unchanged the moment a
-CUDA-usable GPU is available — no code changes are required to produce the
-missing measurements.
-
----
-
-## Setup instructions
-
-Requires **Python ≥ 3.10**.
-
-```bash
-# from repo root
-python -m venv .venv                 # or: uv venv
-source .venv/Scripts/activate        # Windows Git Bash; use .venv/bin/activate on Linux/macOS
-pip install -e .[dev]                # core has NO heavy ML deps
-
-pytest                               # verify: full suite green, no GPU needed
-python -m voice_engine.scripts.run_benchmark --adapters mock --languages en
-```
-
-### Check what this machine can run
-
-The platform probes hardware and reports per-model compatibility before you
-install any weights:
-
-```bash
-python -m voice_engine.scripts.install_models  --all --report-only
-python -m avatar_engine.scripts.install_models --report-only
-```
-
-This prints your GPU / driver / VRAM / RAM and, for every model, whether it
-resolves to `gpu`, `cpu`, `cpu-offline`, or `none`.
-
-### GPU / model installs
-
-- CUDA model installs require an NVIDIA driver **≥ 452.39** (the CUDA 11.8
-  floor). On older drivers the probe reports `CUDA usable: no`.
-- Install PyTorch from the CUDA index matching your driver, e.g.
-  `--index-url https://download.pytorch.org/whl/cu118`.
-- Per-model venvs under `.venvs/` are **machine-bound** (built against a
-  specific base Python) and are git-ignored — **rebuild them after cloning**
-  or moving machines. Do not copy `.venvs/` between machines.
-
----
-
-## Google Colab usage
-
-Colab provides the CUDA-capable GPU this project needs for benchmarking and
-avatar generation.
-
-```python
-# 1. Clone (private repo: use a token or the GitHub CLI)
-!git clone https://github.com/<your-username>/<your-repo>.git
-%cd <your-repo>
-
-# 2. Confirm the GPU + driver
-!nvidia-smi
-
-# 3. Install the core (no heavy deps yet)
-!pip install -e .[dev]
-
-# 4. Probe compatibility on Colab's GPU
-!python -m voice_engine.scripts.install_models --all --report-only
-!python -m avatar_engine.scripts.install_models --report-only
-
-# 5. Install the models the probe cleared, then benchmark on GPU
-!python -m voice_engine.scripts.run_benchmark  --adapters <cleared> --device cuda \
-    --languages en hi hi-en bn
-!python -m avatar_engine.scripts.run_benchmark --adapters <cleared> --device cuda
-```
-
-Notes:
-- Colab GPUs (T4 16 GB / L4 / A100) clear far more of the catalogue than a
-  local 3 GB card — this is the recommended path to complete the A3.6 freeze.
-- Colab storage is ephemeral: `.venvs/`, weights, and `*/output/` are all
-  git-ignored and will not persist. Re-run installs each session, or mount
-  Google Drive for caches.
-- Generated media and benchmark `output/` are regenerable and intentionally
-  not committed — download the reports you want to keep.
-
----
-
-## Future development plan
-
-- **Freeze the production model stack** from measured GPU benchmarks (voice:
-  real-time / quality / lightweight; avatar: production / lightweight /
-  high-end), then mark [`docs/PRODUCTION_STACK.md`](docs/PRODUCTION_STACK.md)
-  FROZEN.
-- **Build the Production Avatar Engine** (Phase A4) on the frozen stack.
-- **Reel assembly** (Phase A5): orchestrate voice + avatar + captions + export.
-- **Multi-GPU / deployment**: data-parallel serving of many short jobs when
-  multi-GPU hardware is procured (see
-  [`docs/MULTI_GPU_COMPATIBILITY_REPORT.md`](docs/MULTI_GPU_COMPATIBILITY_REPORT.md));
-  distributed inference is documented but intentionally not yet implemented.
-
----
-
-## Key documents
-
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — platform architecture and phase reuse map
-- [docs/CONTENT_LIBRARY.md](docs/CONTENT_LIBRARY.md) — Content Library: local single-user project + content store (Phase C15)
-- [docs/WORKFLOW_ENGINE.md](docs/WORKFLOW_ENGINE.md) — Workflow Engine: the deterministic production orchestrator (Phase C14)
-- [docs/EDITING_ENGINE.md](docs/EDITING_ENGINE.md) — Review & Editing Engine: immutable patches + incremental rendering (Phase C11)
-- [docs/PHASE_A36_REPORT.md](docs/PHASE_A36_REPORT.md) — latest phase: GPU validation findings
-- [docs/HARDWARE_COMPATIBILITY_REPORT.md](docs/HARDWARE_COMPATIBILITY_REPORT.md) — measured per-model hardware verdicts
-- [docs/PRODUCTION_STACK.md](docs/PRODUCTION_STACK.md) — production stack (currently NOT frozen)
-- [voice_engine/docs/INSTALLATION.md](voice_engine/docs/INSTALLATION.md) — model installation guide
+The following are **future enhancements, not part of Version 1.0**: batch
+generation, cloud deployment, automatic publishing, and analytics.
