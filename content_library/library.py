@@ -132,6 +132,25 @@ class ContentLibrary:
         """Rebuild ``index.json`` by scanning every manifest (self-healing)."""
         self.index.rebuild()
 
+    # ---- workflow integration (delegates to the C14 Workflow Engine) --------
+    def generate(self, project_id: str, *, renderer: str = "mock", **opts):
+        """Run a project's full ``prompt -> export`` pipeline and persist outputs.
+
+        Delegates to the Workflow Engine rooted at the project directory; returns a
+        :class:`~content_library.workflow_link.GenerationOutcome` (updated record +
+        the workflow result). Does not modify any workflow logic."""
+        from content_library.workflow_link import generate_project
+        return generate_project(self, project_id, renderer=renderer, **opts)
+
+    def rerender(self, project_id: str, **opts):
+        """Reload a project and re-run its workflow (resume) — reproducing outputs."""
+        from content_library.workflow_link import rerender_project
+        return rerender_project(self, project_id, **opts)
+
+    def run_dir(self, project_id: str) -> Path:
+        """The Workflow Engine run directory for a project (``projects/<id>/run``)."""
+        return self.store.run_dir(project_id)
+
     # ---- content pools -------------------------------------------------------
     def pool(self, name: str) -> ContentPool:
         """Access a managed content pool by name (assets/voices/…/exports)."""
