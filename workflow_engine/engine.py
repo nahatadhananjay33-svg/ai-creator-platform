@@ -20,6 +20,15 @@ from workflow_engine.execution.incremental import IncrementalPlan, plan_incremen
 from workflow_engine.execution.journal import RunJournal
 from workflow_engine.stages.base import Presentation
 from workflow_engine.stages.pipeline import build_default_workflow
+from workflow_engine.validation.validate import (
+    ValidationReport,
+    validate_resume,
+    validate_run,
+    validate_workflow,
+)
+
+#: The default pipeline's terminal output artifact(s).
+DEFAULT_OUTPUTS = ("exports",)
 
 
 class WorkflowEngine:
@@ -60,6 +69,22 @@ class WorkflowEngine:
         A pure what-if over the persisted journal — nothing is executed."""
         journal = RunJournal.load(self.run_dir(run_id))
         return plan_incremental(workflow, journal, force=force)
+
+    # ---- validation ----------------------------------------------------------
+    def validate(self, workflow: Workflow,
+                 *, outputs: tuple[str, ...] = DEFAULT_OUTPUTS) -> ValidationReport:
+        """Statically validate a workflow's dependency graph + artifact wiring."""
+        return validate_workflow(workflow, outputs=outputs)
+
+    def validate_result(self, workflow: Workflow, result: WorkflowResult,
+                        *, outputs: tuple[str, ...] = DEFAULT_OUTPUTS) -> ValidationReport:
+        """Validate a completed run (no failures / missing / orphan artifacts)."""
+        return validate_run(workflow, result, outputs=outputs)
+
+    def validate_resume(self, workflow: Workflow, *, run_id: str,
+                        outputs: tuple[str, ...] = DEFAULT_OUTPUTS) -> ValidationReport:
+        """Check that resuming ``run_id`` is a no-op with identical artifact hashes."""
+        return validate_resume(workflow, run_id, self.executor, outputs=outputs)
 
     # ---- convenience ---------------------------------------------------------
     def produce(self, prompt: str, *, run_id: str | None = None, **options) -> WorkflowResult:

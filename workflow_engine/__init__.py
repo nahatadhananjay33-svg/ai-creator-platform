@@ -35,7 +35,18 @@ from workflow_engine.core import (
     WorkflowStage,
 )
 from workflow_engine.engine import WorkflowEngine
-from workflow_engine.execution import RunJournal, WorkflowExecutor
+from workflow_engine.execution import (
+    IncrementalPlan,
+    RunJournal,
+    WorkflowExecutor,
+    plan_incremental,
+)
+from workflow_engine.validation import (
+    ValidationReport,
+    validate_resume,
+    validate_run,
+    validate_workflow,
+)
 from workflow_engine.stages import (
     DEFAULT_ASSETS,
     AssetsStage,
@@ -63,6 +74,12 @@ __all__ = [
     "WorkflowContext",
     "WorkflowExecutor",
     "RunJournal",
+    "IncrementalPlan",
+    "plan_incremental",
+    "ValidationReport",
+    "validate_workflow",
+    "validate_run",
+    "validate_resume",
     "Artifact",
     "StageStatus",
     "StageResult",
