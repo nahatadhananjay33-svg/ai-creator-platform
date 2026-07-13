@@ -41,6 +41,7 @@ class DownloadResult:
     duration: float = 0.0
     thumbnail: str = ""
     description: str = ""
+    publish_date: str = ""    # provider may fill this at download time (YYYY-MM-DD)
 
 
 @dataclass

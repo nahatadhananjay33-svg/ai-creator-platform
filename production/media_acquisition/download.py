@@ -99,7 +99,7 @@ class DownloadEngine:
         r = result
         return MediaRecord(
             id=0, platform=item.platform.value, url=item.url, title=item.title,
-            publish_date=item.publish_date,
+            publish_date=((r.publish_date if r and r.publish_date else "") or item.publish_date),
             duration=(r.duration if r and r.duration else item.duration),
             resolution=(r.resolution if r else ""), fps=(r.fps if r else 0.0),
             checksum=checksum, filename=(r.filename if r else ""),
