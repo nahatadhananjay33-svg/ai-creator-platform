@@ -27,7 +27,7 @@ def run_provider(provider: MediaProvider, dest_dir: Path, engine: DownloadEngine
     stats = ProviderStats(platform=provider.platform.value)
     if not provider.is_available():
         stats.available = False
-        stats.note = "provider unavailable (tool or credentials missing) — skipped"
+        stats.note = "provider unavailable (tool or credentials missing) - skipped"
         return stats
 
     effective_limit = limit if limit is not None else cfg.limit

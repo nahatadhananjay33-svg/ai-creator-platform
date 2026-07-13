@@ -12,13 +12,14 @@ class FakeProvider(MediaProvider):
     def __init__(self, platform: Platform, items: List[MediaItem],
                  contents: Optional[Dict[str, bytes]] = None,
                  fail_first: Optional[Dict[str, int]] = None,
-                 available: bool = True):
+                 available: bool = True, ext: str = "mp4"):
         self.platform = platform
         self._items = items
         self._contents = contents or {}
         self._fail_first = fail_first or {}   # item_id -> fail this many times, then succeed
         self._attempts: Dict[str, int] = {}
         self._available = available
+        self._ext = ext
 
     def is_available(self) -> bool:
         return self._available
@@ -32,7 +33,7 @@ class FakeProvider(MediaProvider):
         if n <= self._fail_first.get(item.item_id, 0):
             raise RuntimeError(f"simulated failure {n} for {item.item_id}")
         content = self._contents.get(item.item_id, item.item_id.encode())
-        fn = f"{item.item_id}.mp4"
+        fn = f"{item.item_id}.{self._ext}"
         (Path(dest_dir) / fn).write_bytes(content)
         return DownloadResult(filename=fn, checksum="", resolution="1080p",
                               fps=30.0, codec="h264", duration=item.duration or 10.0)
