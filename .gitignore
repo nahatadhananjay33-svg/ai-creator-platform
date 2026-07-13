@@ -107,3 +107,8 @@ Thumbs.db
 .vscode/
 *.swp
 reel_engine/output/
+
+# --- Production voice dataset (raw media + generated datasets; regenerable) ----
+# Source media is the user's own exported content; datasets are rebuildable.
+# The builder recreates this tree on each run; only code/docs are committed.
+/production_assets/
