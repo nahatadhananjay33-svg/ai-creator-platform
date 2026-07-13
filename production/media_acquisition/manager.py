@@ -25,13 +25,17 @@ class ProviderStats:
 def run_provider(provider: MediaProvider, dest_dir: Path, engine: DownloadEngine,
                  cfg: Config, limit: Optional[int] = None) -> ProviderStats:
     stats = ProviderStats(platform=provider.platform.value)
-    if not provider.is_available():
+    try:
+        if not provider.is_available():
+            stats.available = False
+            stats.note = "provider unavailable (tool or credentials missing) - skipped"
+            return stats
+        effective_limit = limit if limit is not None else cfg.limit
+        items = list(provider.list_items(limit=effective_limit))
+    except Exception as e:            # discovery/auth/network error -> skip, don't crash the run
         stats.available = False
-        stats.note = "provider unavailable (tool or credentials missing) - skipped"
+        stats.note = f"discovery failed: {e}"
         return stats
-
-    effective_limit = limit if limit is not None else cfg.limit
-    items = list(provider.list_items(limit=effective_limit))
     stats.discovered = len(items)
     for item in items:
         result = engine.process(provider, item, dest_dir)

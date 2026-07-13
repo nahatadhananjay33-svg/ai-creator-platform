@@ -74,9 +74,10 @@ def test_full_pipeline_stop_condition(tmp_path):
 
 
 def test_empty_run_still_produces_all_files(tmp_path):
-    # default providers are unavailable locally (no yt-dlp / no IG creds) -> skipped,
-    # but the run still builds empty media + voice datasets and prints a summary.
-    rc = run(["--base", str(tmp_path), "--creator", "tanshi"])
+    # No providers -> no downloads, but the run still builds empty media + voice
+    # datasets and prints a summary. Uses explicit [] so it never depends on which
+    # download tools happen to be installed in the environment.
+    rc = run(["--base", str(tmp_path), "--creator", "tanshi"], providers=[])
     assert rc == 0
     meta = tmp_path / "tanshi" / "voice" / "metadata"
     for f in STOP_FILES:

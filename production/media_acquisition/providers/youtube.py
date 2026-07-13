@@ -63,7 +63,8 @@ class YouTubeProvider(MediaProvider):
                     url=f"https://www.youtube.com/watch?v={vid}",
                     title=e.get("title") or "",
                     duration=float(e.get("duration") or 0.0), kind=kind))
-        items.sort(key=lambda it: it.item_id)      # deterministic order
+        # Preserve YouTube's channel order (newest first) so --limit N takes the
+        # N NEWEST videos (long-form first, then Shorts) — the validate-first flow.
         return items[:limit] if limit is not None else items
 
     def fetch(self, item: MediaItem, dest_dir: Path) -> DownloadResult:
