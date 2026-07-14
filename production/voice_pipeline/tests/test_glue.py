@@ -59,6 +59,41 @@ def test_resume_adds_only_new(tmp_path, synth):
     conn.close()
 
 
+def test_copy_media_resume(tmp_path):
+    from production.voice_pipeline.glue import copy_media
+    src = tmp_path / "src"; src.mkdir()
+    (src / "a.wav").write_bytes(b"x" * 100)
+    (src / "b.mp4").write_bytes(b"y" * 50)
+    (src / "note.txt").write_bytes(b"skip me")     # non-media, ignored
+    dst = tmp_path / "dst"
+
+    copied, failed = copy_media(src, dst, progress=False)
+    assert {p.name for p in copied} == {"a.wav", "b.mp4"} and not failed
+    assert (dst / "a.wav").read_bytes() == b"x" * 100
+    copied2, _ = copy_media(src, dst, progress=False)   # resume: same-size skip
+    assert len(copied2) == 2
+
+
+def test_robust_copyfile_retries_and_remounts(tmp_path, monkeypatch):
+    from production.voice_pipeline import glue
+    state = {"attempts": 0, "remounts": 0}
+    real = glue.shutil.copyfile
+
+    def flaky(a, b):
+        state["attempts"] += 1
+        if state["attempts"] == 1:
+            raise OSError(107, "Transport endpoint is not connected")
+        return real(a, b)
+
+    monkeypatch.setattr(glue.shutil, "copyfile", flaky)
+    src = tmp_path / "s.wav"; src.write_bytes(b"z" * 10)
+    ok = glue._robust_copyfile(src, tmp_path / "d.wav", retries=3, backoff=0,
+                               sleep=lambda *_: None,
+                               on_error=lambda: state.__setitem__("remounts", state["remounts"] + 1))
+    assert ok and (tmp_path / "d.wav").exists()
+    assert state["remounts"] == 1        # remount was triggered before the retry
+
+
 def test_resume_noop_when_nothing_new(tmp_path, synth):
     source = tmp_path / "Tanshi_raw_videos"
     ws = tmp_path / "workspace"

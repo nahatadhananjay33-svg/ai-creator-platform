@@ -85,12 +85,95 @@ def _wav_name(rec: Record) -> str:
 
 
 def _dir_size(path: Path) -> int:
-    return sum(p.stat().st_size for p in Path(path).rglob("*") if p.is_file())
+    total = 0
+    for p in Path(path).rglob("*"):
+        try:
+            if p.is_file():
+                total += p.stat().st_size
+        except OSError:                      # tolerate a flaky mount
+            continue
+    return total
+
+
+def _same_size(a, b) -> bool:
+    try:
+        return Path(a).stat().st_size == Path(b).stat().st_size
+    except OSError:
+        return False
+
+
+def _robust_copyfile(src, dst, retries: int = 3, on_error=None,
+                     backoff: float = 1.0, sleep=time.sleep) -> bool:
+    """Copy with retry — survives a transient Drive FUSE drop (Errno 107).
+
+    ``on_error`` (e.g. a Drive remount) is called between attempts.
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            shutil.copyfile(src, dst)
+            return True
+        except OSError:
+            if attempt == retries:
+                return False
+            if on_error:
+                try:
+                    on_error()
+                except Exception:
+                    pass
+            if backoff:
+                sleep(backoff * attempt)
+    return False
+
+
+def _list_media(src_dir, on_error=None, retries: int = 3, sleep=time.sleep) -> List[Path]:
+    """List media files (by extension, no per-file stat), retrying the walk on OSError."""
+    src_dir = Path(src_dir)
+    for attempt in range(1, retries + 1):
+        try:
+            return sorted((p for p in src_dir.rglob("*")
+                           if p.suffix.lower() in MEDIA_EXTS),
+                          key=lambda x: x.as_posix())
+        except OSError:
+            if attempt == retries:
+                raise
+            if on_error:
+                try:
+                    on_error()
+                except Exception:
+                    pass
+            sleep(1.0 * attempt)
+    return []
+
+
+def copy_media(src_dir, dst_dir, retries: int = 3, on_error=None,
+               progress: bool = True):
+    """Copy every media file src_dir -> dst_dir (flat), resumable and retrying.
+
+    Skips files already present at the same size (resume). Returns
+    (copied_paths, failed_names). Use this to stage flaky Drive media onto fast,
+    reliable local disk before processing.
+    """
+    src_dir, dst_dir = Path(src_dir), Path(dst_dir)
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    files = _list_media(src_dir, on_error=on_error, retries=retries)
+    it = _progress(files, total=len(files), desc="copying") if progress else files
+    copied, failed = [], []
+    for p in it:
+        target = dst_dir / p.name
+        if target.exists() and _same_size(p, target):
+            copied.append(target)
+            continue
+        if _robust_copyfile(p, target, retries=retries, on_error=on_error):
+            copied.append(target)
+        else:
+            failed.append(p.name)
+    return copied, failed
 
 
 def run_pipeline(source_dir: Path, workspace: Path, drive_out: Path,
                  creator: str = "tanshi", resume: bool = True,
-                 progress: bool = True, cfg: Optional[VConfig] = None) -> dict:
+                 progress: bool = True, cfg: Optional[VConfig] = None,
+                 on_error=None) -> dict:
     """Process ``source_dir`` into a voice dataset saved under ``drive_out``.
 
     Reuses the existing builder for all per-clip work. Returns the summary dict.
@@ -113,15 +196,13 @@ def run_pipeline(source_dir: Path, workspace: Path, drive_out: Path,
     provider = FolderProvider(source_dir, skip=done, progress=progress)
     new_records = build_dataset(vpaths, cfg, provider=provider)
 
-    # sync freshly-processed audio to Drive
+    # sync freshly-processed audio to Drive (resilient to Drive FUSE drops)
     for rec in new_records:
         wn = _wav_name(rec)
         src = (vpaths.accepted if rec.accepted else vpaths.rejected) / wn
         if src.exists():
-            try:
-                shutil.copyfile(src, (drive_acc if rec.accepted else drive_rej) / wn)
-            except OSError:
-                pass
+            _robust_copyfile(src, (drive_acc if rec.accepted else drive_rej) / wn,
+                             on_error=on_error)
 
     merged = prior + new_records
     for i, rec in enumerate(merged, 1):          # renumber ids, point audio at Drive
@@ -133,7 +214,7 @@ def run_pipeline(source_dir: Path, workspace: Path, drive_out: Path,
     write_csv(merged, ws_meta / "dataset.csv")
     write_xlsx(merged, ws_meta / "dataset.xlsx")
     for name in ("dataset.sqlite", "dataset.csv", "dataset.xlsx"):
-        shutil.copyfile(ws_meta / name, drive_meta / name)
+        _robust_copyfile(ws_meta / name, drive_meta / name, on_error=on_error)
 
     summary = _summary(merged, processed=len(new_records), skipped=len(done),
                        elapsed=time.time() - t0, drive_out=drive_out)

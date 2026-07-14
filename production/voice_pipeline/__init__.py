@@ -8,6 +8,6 @@ sync of outputs, and a consolidated summary.
 
 Nothing here rewrites the Media Acquisition or Voice Dataset Builder modules.
 """
-from .glue import FolderProvider, format_report, run_pipeline
+from .glue import FolderProvider, copy_media, format_report, run_pipeline
 
-__all__ = ["FolderProvider", "run_pipeline", "format_report"]
+__all__ = ["FolderProvider", "run_pipeline", "format_report", "copy_media"]
