@@ -167,8 +167,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     emit(f"  {detail}")
 
     emit(_banner("VALIDATION"))
-    checks = validate_merge(prod, old_rows, stats["added"], audit_ok)
-    emit(format_validation(checks))
+    checks, notes = validate_merge(prod, old_rows, stats["added"], audit_ok)
+    emit(format_validation(checks, notes))
 
     report_text = "\n".join(out) + "\n"
     reports = new_out / "reports"

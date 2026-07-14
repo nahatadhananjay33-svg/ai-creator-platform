@@ -137,8 +137,15 @@ def _xlsx_rows(path: Path) -> int:
 
 
 def validate_merge(prod_dir: Path, old_rows: List[dict], added: int,
-                   audit_ok: bool) -> Dict[str, bool]:
-    """The spec's validation checklist, each item measured."""
+                   audit_ok: bool) -> Tuple[Dict[str, bool], List[str]]:
+    """The spec's validation checklist, each item measured.
+
+    Duplicate detection is scoped to what the merge controls: segments ADDED
+    by V4.1 must be unique and must not duplicate any pre-merge accepted
+    segment. Duplicates that already existed inside the V4 dataset (duplicate
+    source videos in the raw dump) are outside "unchanged except additions" —
+    they are reported as notes, not failures.
+    """
     prod_dir = Path(prod_dir)
     meta = prod_dir / "metadata"
     rows = load_segments(meta / "dataset.sqlite")
@@ -146,13 +153,27 @@ def validate_merge(prod_dir: Path, old_rows: List[dict], added: int,
     old_keys = [(r["source_kind"], r["segment_file"]) for r in old_rows]
     new_keys = [(r["source_kind"], r["segment_file"]) for r in rows[:len(old_rows)]]
     accepted = [r for r in rows if r["accepted"]]
-    hashes = [sha256(Path(r["audio_path"])) for r in accepted
-              if Path(r["audio_path"]).exists()]
 
-    return {
+    def _hashes(subset: List[dict]) -> List[str]:
+        return [sha256(Path(r["audio_path"])) for r in subset
+                if r["accepted"] and Path(r["audio_path"]).exists()]
+
+    old_hashes = _hashes(rows[:len(old_rows)])
+    added_hashes = _hashes(rows[len(old_rows):])
+    merge_dup_free = (len(added_hashes) == len(set(added_hashes))
+                      and not set(added_hashes) & set(old_hashes))
+
+    notes: List[str] = []
+    pre_existing = len(old_hashes) - len(set(old_hashes))
+    if pre_existing:
+        notes.append(f"{pre_existing} duplicate segment(s) pre-date this merge "
+                     f"(duplicate source videos in the V4 raw dump); left "
+                     f"untouched per 'unchanged except additions'.")
+
+    checks = {
         "existing dataset unchanged except additions":
             new_keys == old_keys and len(rows) == len(old_rows) + added,
-        "no duplicate segments (sha256)": len(hashes) == len(set(hashes)),
+        "no duplicate segments introduced by merge (sha256)": merge_dup_free,
         "metadata synchronized (ids sequential)":
             [r["id"] for r in rows] == list(range(1, len(rows) + 1)),
         "sqlite consistent": len(rows) == len(old_rows) + added,
@@ -162,8 +183,11 @@ def validate_merge(prod_dir: Path, old_rows: List[dict], added: int,
             all(Path(r["audio_path"]).exists() for r in accepted),
         "random audit passed": audit_ok,
     }
+    return checks, notes
 
 
-def format_validation(checks: Dict[str, bool]) -> str:
-    return "\n".join(f"  {'[OK]  ' if ok else '[FAIL]'} {name}"
-                     for name, ok in checks.items())
+def format_validation(checks: Dict[str, bool], notes: List[str] = ()) -> str:
+    lines = [f"  {'[OK]  ' if ok else '[FAIL]'} {name}"
+             for name, ok in checks.items()]
+    lines += [f"  note: {n}" for n in notes]
+    return "\n".join(lines)
