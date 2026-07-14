@@ -24,7 +24,9 @@ class Config:
     min_duration_s: float = 2.0                 # "too short"
     no_face_below_pct: float = 15.0             # "no visible face"
     face_too_small_pct: float = 0.8             # avg face area % of frame -> "face too small"
-    heavy_blur_below: float = 60.0             # Laplacian variance -> "heavy blur"
+    heavy_blur_below: float = 20.0             # Laplacian variance -> "heavy blur"
+    # (kept conservative: blur variance scales with resolution/content, so only
+    #  clearly-blurry clips are hard-rejected; the composite score down-weights softness)
     extreme_rotation_profile_pct: float = 75.0  # mostly-profile -> "extreme head rotation"
     occlusion_covered_pct: float = 70.0         # eyes+mouth missing -> "face covered"
     very_dark_below: float = 45.0               # mean luma -> "very dark"
