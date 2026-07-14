@@ -123,6 +123,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--audit-n", type=int, default=20)
     args = ap.parse_args(argv)
 
+    import sys
+    try:                                          # Windows consoles default to cp1252
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     base = Path(args.base)
     raw = base / "raw_videos"
     out = base / "voice_dataset"
