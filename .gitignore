@@ -107,3 +107,6 @@ Thumbs.db
 .vscode/
 *.swp
 reel_engine/output/
+
+# --- Local production/data artifacts (regenerable; never commit) --------------
+/production_assets/
