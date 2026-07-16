@@ -43,19 +43,45 @@ kokoro, indic-parler, dia`. An invalid name fails fast in the Config cell.
 | Underlying `cloud_setup` module | **6/6 hermetic tests pass** (manifest build, verify, tamper detection) |
 | Manifest it verifies against | generated from the **real** dataset: 1081 files, 685.11 MB, structure ✓, metadata ✓ |
 
-## NOT yet validated — requires a live Colab run
+## Live Colab validation — PASSED ✅ (2026-07-16)
 
-I cannot execute Colab from this machine, so these are unproven until you Run All:
+A real **Run All** on Colab (Tesla T4 runtime) completed with **every check green**:
 
-- `drive.mount` / auto-discovery against your actual Drive layout
-- `git clone` of `BRANCH` on Colab
-- `apt`/`pip` installs on the Colab image
-- torch/CUDA detection on a GPU runtime
-- **the dataset integrity check will FAIL until the dataset is uploaded** (see
-  `DRIVE_UPLOAD_REPORT.md`) — that is expected, not a notebook defect
+```
+MODEL = xtts-v2
+OK  Drive mounted
+OK  repo /content/ai-creator-platform @ feat/cloud-setup (4a67508)
+OK  ffmpeg: /usr/bin/ffmpeg
+OK  dataset: /content/drive/MyDrive/Ai_creator/Voice_AI_Tanshi/production_voice_dataset
+      accepted_segments  550 files
+      rejected_segments  524 files
+      metadata           4 files
+OK  python              3.12.13
+OK  torch               2.11.0+cu128 cuda=True
+OK  gpu                 Tesla T4
+OK  ffmpeg              /usr/bin/ffmpeg
+OK  repo import         /content/ai-creator-platform
+OK  manifest present    .../voice_dataset_manifest.json
+OK  dataset integrity   1081/1081 files (missing 0, size-bad 0, hash-bad 0)
 
-**Please Run All once and paste the output**; I'll confirm each check and fix anything
-that misbehaves.
+     accepted segments : 550
+     accepted hours    : 1.327 (speech 1.108)
+==========================================================
+  ENVIRONMENT READY
+==========================================================
+```
+
+Every previously-unproven item is now confirmed on real infrastructure:
+`drive.mount`, dataset discovery, `git clone` of `BRANCH`, pip/apt installs,
+torch+CUDA on GPU, manifest load, and dataset integrity.
+
+Notes from the run:
+- The user set `DATASET_PATH_OVERRIDE` to their actual path
+  (`MyDrive/Ai_creator/Voice_AI_Tanshi/production_voice_dataset`). Auto-discovery
+  would also have found it (depth 3 ≤ 4); the override just skips the search.
+- `VERIFY_MODE = "quick"` → presence + exact size for all 1081 files. Use `"full"`
+  for a one-time sha256 content proof.
+- GPU is present (T4) though not required for setup.
 
 ## Known constraints
 

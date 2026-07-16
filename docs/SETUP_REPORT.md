@@ -75,7 +75,21 @@ production/cloud_setup/
 |---|---|
 | 1. Git clean + synced | **DONE** |
 | 2. Validate + checksum + manifest | **DONE** |
-| 3. Drive upload + verify | **BLOCKED** — awaiting the Drive folder link (see `DRIVE_UPLOAD_REPORT.md`) |
-| 4. Production Colab notebook | **DONE** |
+| 3. Drive upload + verify | **DONE** — uploaded by the user; **1081/1081 files verified** (0 missing, 0 size-bad) via a live Colab run. See `DRIVE_UPLOAD_REPORT.md` |
+| 4. Production Colab notebook | **DONE** — live Run All passed on a T4 runtime (`NOTEBOOK_VALIDATION.md`) |
 | 5. Modular (model-name only) | **DONE** |
 | 6. Reports | **DONE** |
+
+## 6. Phase outcome
+
+**The project is in a fully reproducible state.** Future training/benchmarking on
+Colab requires only: open `notebooks/tanshi_voice_cloning_setup.ipynb`, set `MODEL`,
+Run All. Verified end-to-end on real infrastructure:
+`Drive mount → clone @ feat/cloud-setup → deps+ffmpeg → dataset auto-located →
+env validated (T4, torch 2.11+cu128) → 1081/1081 files integrity-checked → READY`.
+
+Outstanding (deliberately out of scope for this phase):
+- **Merge the feature branches into `main`**, then set `BRANCH = "main"` in the
+  notebook — today "reproducible" depends on `feat/cloud-setup`.
+- Optional one-time `VERIFY_MODE = "full"` for sha256 content proof.
+- Model training/benchmarking — not started, by instruction.

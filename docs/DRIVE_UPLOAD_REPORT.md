@@ -1,7 +1,37 @@
 # DRIVE_UPLOAD_REPORT — Production Voice Dataset
 
-**Status: UPLOAD NOT PERFORMED — awaiting the user to upload.** The destination is
-confirmed and verified empty; everything needed to verify is prepared.
+## STATUS: UPLOAD COMPLETE AND VERIFIED ✅ (2026-07-16)
+
+Verified by a live Colab **Run All** of `notebooks/tanshi_voice_cloning_setup.ipynb`,
+which mounted the owning Drive account and checked the uploaded copy against the
+committed manifest.
+
+| Result | Value |
+|---|---|
+| Uploaded path | `/content/drive/MyDrive/Ai_creator/Voice_AI_Tanshi/production_voice_dataset` |
+| **Files verified** | **1081 / 1081** |
+| Missing | **0** |
+| Size mismatches (truncated/partial) | **0** |
+| Hash mismatches | 0 *(see caveat)* |
+| accepted_segments | **550** |
+| rejected_segments | **524** |
+| metadata files | 4 |
+| Accepted hours | **1.327** (speech 1.108) |
+| Repo commit verified against | `4a67508` (`feat/cloud-setup`) |
+
+**Caveat — what was actually proven:** the run used `VERIFY_MODE = "quick"`, which
+checks **presence + exact byte size** for every file. That conclusively rules out
+missing and truncated/partial uploads (the realistic failure modes), but it does
+**not** re-hash content, so `hash-bad 0` is trivially true rather than a content
+proof. For a one-time sha256 content verification, set `VERIFY_MODE = "full"` and
+re-run the validation cell (slower over the Drive mount).
+
+Directory structure was preserved exactly (`accepted_segments/`,
+`rejected_segments/`, `metadata/`, `reports/`, `VOICE_DATASET_REPORT.md`).
+
+---
+
+### Historical record (how this was reached)
 
 ## Destination (confirmed 2026-07-16 via the Drive API)
 
