@@ -107,3 +107,6 @@ Thumbs.db
 .vscode/
 *.swp
 reel_engine/output/
+
+# --- Local production data (never committed; datasets live on D:\AI_CREATOR_DATA)
+production_assets/
