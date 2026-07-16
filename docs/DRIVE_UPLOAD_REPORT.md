@@ -53,6 +53,31 @@ notebook auto-discovers it by folder name anywhere under `MyDrive`.
 Result must be `MyDrive/Voice_AI_Tanshi/production_voice_dataset/{accepted_segments,
 rejected_segments,metadata,reports}` — i.e. drop the folder in, don't unpack it.
 
+## Why the assistant cannot verify the upload from the dev machine
+
+Established 2026-07-16 by direct API probing:
+
+| Probe | Result | Meaning |
+|---|---|---|
+| `get_file_metadata('1a5tj…')` | **works** — returns `Voice_AI_Tanshi`, owner `nahatadhananjay33@gmail.com` | folder reachable **by ID/link only** |
+| `search: title = 'Voice_AI_Tanshi'` | **empty** | folder is **not in the connector account's search corpus** |
+| `search: parentId = '1a5tj…'` | **empty** | **children cannot be enumerated** — this is *not* evidence of a failed upload |
+| `search: sharedWithMe = true` | returns many files | the connector **is** authenticated and search works generally |
+
+The Drive connector is authenticated as a **different Google account** than the folder's
+owner (the folder was uploaded from the `/u/2/` account). A link-shared folder owned by
+another account is not indexed into this account's search corpus, so its contents cannot
+be listed. **An empty listing here therefore proves nothing about the upload.**
+
+Two ways to resolve:
+
+1. **Verify on Colab (recommended, already built).** The setup notebook mounts *your*
+   Drive as the owning account and verifies every file against the manifest. Run All and
+   read the "dataset integrity" row. Authenticate with the account that owns
+   `Voice_AI_Tanshi`.
+2. Share `Voice_AI_Tanshi` with the connector's account, after which it can be enumerated
+   and verified from here.
+
 ## Verification (this is the important part — automated)
 
 Every file's sha256 is committed in
