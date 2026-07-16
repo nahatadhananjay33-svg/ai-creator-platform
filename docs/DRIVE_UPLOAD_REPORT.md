@@ -1,16 +1,30 @@
 # DRIVE_UPLOAD_REPORT — Production Voice Dataset
 
-**Status: UPLOAD NOT PERFORMED — blocked.** Everything needed to upload and verify
-is prepared; the upload itself is pending two things (below).
+**Status: UPLOAD NOT PERFORMED — awaiting the user to upload.** The destination is
+confirmed and verified empty; everything needed to verify is prepared.
 
-## Why the upload has not happened
+## Destination (confirmed 2026-07-16 via the Drive API)
 
-1. **No Drive folder link provided.** The task says *"I will provide a Google Drive
-   folder link"* — it hasn't been supplied yet, so there is no destination.
-2. **This machine cannot bulk-upload to Drive.** There is no Drive desktop client,
-   `rclone`, or authenticated Drive CLI configured here, and the available Drive
-   connector has no bulk binary-upload capability (it can create/read files, not
-   push 1081 binaries / 685 MB). I will not fake an upload report.
+| | |
+|---|---|
+| Folder | **`Voice_AI_Tanshi`** |
+| ID | `1a5tjFn1_RsihQ5fQ8zQOBaZHtQ9eHeaF` |
+| Owner | `nahatadhananjay33@gmail.com` |
+| Created | 2026-07-16 08:58 UTC |
+| Current contents | **empty (0 children)** |
+| Expected final path | `MyDrive/Voice_AI_Tanshi/production_voice_dataset/` |
+
+## Why the upload has not been performed by the assistant
+
+1. **This machine has no bulk-upload path to Drive** — no Drive desktop client and no
+   `rclone`/authenticated Drive CLI is configured here.
+2. **The Drive connector cannot write to this folder.** Its metadata reports
+   `canAddChildren: false`, and it exposes no bulk binary-upload capability — it
+   reads/creates document-type files, it cannot push 1081 binaries / 685 MB.
+
+The upload therefore has to be done from your side (one drag-drop). **I will not
+fabricate an upload report.** Once the files are there, verification is automated
+(below) and I can confirm it from here.
 
 ## What to upload
 
@@ -27,11 +41,17 @@ notebook auto-discovers it by folder name anywhere under `MyDrive`.
 
 ## How to upload (choose one)
 
-- **Drive web** — drag the `production_voice_dataset` folder into the target folder.
-  Chrome preserves subfolders. 685 MB is a single, uneventful upload.
+- **Drive web (simplest)** — open
+  <https://drive.google.com/drive/folders/1a5tjFn1_RsihQ5fQ8zQOBaZHtQ9eHeaF> and drag
+  the **`production_voice_dataset` folder itself** from
+  `D:\AI_CREATOR_DATA\Tanshi\` into it. Chrome preserves the subfolder tree. 685 MB is
+  a single, uneventful upload.
 - **Google Drive for desktop** — copy the folder into your synced Drive path.
 - **rclone** (fastest, resumable):
-  `rclone copy "D:\AI_CREATOR_DATA\Tanshi\production_voice_dataset" "gdrive:<target>/production_voice_dataset" -P`
+  `rclone copy "D:\AI_CREATOR_DATA\Tanshi\production_voice_dataset" "gdrive:Voice_AI_Tanshi/production_voice_dataset" -P`
+
+Result must be `MyDrive/Voice_AI_Tanshi/production_voice_dataset/{accepted_segments,
+rejected_segments,metadata,reports}` — i.e. drop the folder in, don't unpack it.
 
 ## Verification (this is the important part — automated)
 
