@@ -72,8 +72,11 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         # pyarrow pin resolved empirically (Phase A1.5): pyarrow 24.0 wheels crash
         # with an access violation on this Windows/CPU combination; 21.0.0 is the
         # oldest version satisfying datasets>=5.0 and imports cleanly.
+        # numba>=0.60 keeps the resolver off numba 0.53 -> llvmlite 0.36, which
+        # only builds on Python <3.10 (hit on the F5 benchmark re-install,
+        # 2026-07-16; same pin as indic-parler/dia).
         pip_groups=(
-            ("f5-tts",) + _PLATFORM_CORE,
+            ("f5-tts", "numba>=0.60") + _PLATFORM_CORE,
             ("pyarrow==21.0.0",),
         ),
         verify_imports=("f5_tts", "soundfile"),
