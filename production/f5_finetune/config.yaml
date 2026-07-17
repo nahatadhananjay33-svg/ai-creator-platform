@@ -1,0 +1,50 @@
+# T3 — F5-TTS production fine-tuning configuration (single source of truth).
+# TRAINING_CONFIG.md documents every knob; edit here, not in code.
+
+model: f5-tts                    # adapter/venv id (voice_engine registry)
+exp_name: F5TTS_v1_Base          # pretrained experiment to fine-tune from
+dataset_name: tanshi_voice       # -> data/<name>_pinyin + ckpts/<name>
+
+paths:
+  local:
+    dataset_root: D:/AI_CREATOR_DATA/Tanshi/production_voice_dataset
+    workspace: D:/AI_CREATOR_DATA/Tanshi/f5_finetune_workspace
+  colab:
+    dataset_root: /content/drive/MyDrive/Ai_creator/Voice_AI_Tanshi/production_voice_dataset
+    workspace: /content/drive/MyDrive/Ai_creator/Voice_AI_Tanshi/f5_finetune
+
+transcription:
+  # large-v3 fits a T4 with int8_float16; local CPU probes use `small`.
+  whisper_model: large-v3
+  compute_type: auto             # auto -> float16 on CUDA, int8 on CPU
+  language: hi                   # decode bias; code-switched EN comes through
+  romanize: true                 # Devanagari -> Latin (ITRANS, lowercased)
+  min_chars: 4                   # drop degenerate transcripts
+  max_no_speech_prob: 0.5        # drop segments Whisper thinks are non-speech
+
+training:
+  learning_rate: 1.0e-5
+  batch_size_per_gpu: 3200       # frames; safe for T4 16GB @ fp16
+  batch_size_type: frame
+  max_samples: 32
+  grad_accumulation_steps: 2
+  epochs: 50
+  num_warmup_updates: 400
+  save_per_updates: 500          # checkpoint cadence (~every 7 epochs here)
+  keep_last_n_checkpoints: 6
+  last_per_updates: 250          # model_last.pt refresh (resume granularity)
+  mixed_precision: fp16
+  tokenizer: pinyin              # pretrained Emilia vocab (prepare copies it)
+  logger: tensorboard
+  log_samples: true              # trainer writes ref/gen wavs per checkpoint
+
+evaluation:
+  # Objective per-checkpoint eval on fixed prompts (never seen in training).
+  prompts:
+    - "The three bedroom apartment has a carpet area of fourteen hundred square feet."
+    - "Sir, yeh flat seventh floor par hai aur do parking included hai."
+    - "Aap hamein nine eight two six zero one four three five seven par call kar sakte hain."
+  reference: auto                # auto -> highest-SNR accepted segment + its transcript
+  nfe_step: 32
+  use_ema: false                 # f5 README: EMA harmful for early finetune ckpts
+  install_optional_backends: false  # true (Linux/GPU) -> pip install resemblyzer for speaker-sim
