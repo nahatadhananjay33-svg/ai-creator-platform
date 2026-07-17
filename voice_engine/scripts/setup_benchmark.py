@@ -22,6 +22,7 @@ Fine-tuning and multi-model comparison are explicitly out of scope — use
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -95,10 +96,14 @@ def _run_validation(python: Path, model_id: str, args: argparse.Namespace,
 
     logger.info("Dispatching validation into model venv",
                 extra={"context": {"model": model_id, "python": str(python)}})
+    # Notebook kernels export MPLBACKEND=module://matplotlib_inline.backend_inline,
+    # which only resolves inside the kernel's own env — the model venv has no
+    # matplotlib_inline, so any matplotlib import there dies. Force headless Agg.
+    env = {**os.environ, "MPLBACKEND": "Agg"}
     with Stopwatch() as sw:
         proc = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True,
                               encoding="utf-8", errors="replace",
-                              timeout=args.validation_timeout)
+                              timeout=args.validation_timeout, env=env)
     log_path.write_text(
         f"$ {' '.join(cmd)}\n\n--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}\n",
         encoding="utf-8",
