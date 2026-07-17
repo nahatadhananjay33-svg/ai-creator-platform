@@ -219,6 +219,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     reference = _resolve_reference(model_id, args)
+    ref_audio, _ = reference
+    if ref_audio is not None and not ref_audio.exists():
+        print(f"[setup] {model_id}: FAIL — cloning reference not found: {ref_audio}\n"
+              "        (pass --reference-audio, or make sure the synthetic clip is "
+              "checked out — it is committed for exactly this reason)", flush=True)
+        return 1
     log_path = out_dir / "setup.log"
     print(f"[setup] {model_id}: stage 2 — load + smoke inference "
           "(downloads weights on first run; slow on CPU) ...", flush=True)

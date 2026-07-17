@@ -99,6 +99,9 @@ huggingface_cache/
 # Keep dataset/asset documentation (not media, but explicit for clarity):
 !voice_engine/datasets/reference_audio/README.md
 !avatar_engine/datasets/data/assets/README.md
+# Synthetic (machine-generated) default cloning reference for setup_benchmark —
+# travels with the repo so Colab clones can validate cloning models (T2).
+!voice_engine/datasets/reference_audio/synthetic/synthetic_en_20s.wav
 
 # --- OS / editor --------------------------------------------------------------
 .DS_Store
