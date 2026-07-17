@@ -30,8 +30,9 @@ training:
   grad_accumulation_steps: 2
   epochs: 50
   num_warmup_updates: 400
-  save_per_updates: 500          # checkpoint cadence (~every 7 epochs here)
-  keep_last_n_checkpoints: 6
+  save_per_updates: 500          # checkpoint cadence (~every 6 epochs here)
+  keep_last_n_checkpoints: 3     # full ckpts carry optimizer state (several GB each)
+  num_workers: 2                 # DataLoader workers; 16 (f5 default) OOM-kills Colab VMs
   last_per_updates: 250          # model_last.pt refresh (resume granularity)
   mixed_precision: fp16
   tokenizer: pinyin              # pretrained Emilia vocab (prepare copies it)

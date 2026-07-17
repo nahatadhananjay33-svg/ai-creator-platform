@@ -80,7 +80,8 @@ INSTALL_SPECS: dict[str, InstallSpec] = {
         # on Windows and Linux.
         pip_groups=(
             ("f5-tts", "numba>=0.60") + _PLATFORM_CORE,
-            ("pyarrow==21.0.0", "faster-whisper>=1.0", "indic-transliteration>=2.3"),
+            ("pyarrow==21.0.0", "faster-whisper>=1.0", "indic-transliteration>=2.3",
+             "tensorboard"),  # finetune_cli's logger imports it at Trainer init
         ),
         verify_imports=("f5_tts", "soundfile"),
         approx_download_gb=2.0,

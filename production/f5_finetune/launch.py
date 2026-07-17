@@ -28,17 +28,35 @@ from production.f5_finetune.common import (  # noqa: E402
 )
 
 
-def build_command(cfg: dict, python: Path) -> list[str]:
-    t = cfg["training"]
-    finetune_cli = None
+def ensure_venv_deps(python: Path) -> None:
+    """Idempotent preflight for trainer-only deps (tensorboard logger).
+
+    The tensorboard logger imports the real package at Trainer init; a venv
+    built before the spec added it dies with ModuleNotFoundError (T4 run,
+    2026-07-17). Installs only when the import is missing.
+    """
+    import shutil
     import subprocess
 
-    out = subprocess.run(
-        [str(python), "-c", "import f5_tts.train.finetune_cli as m; print(m.__file__)"],
-        capture_output=True, text=True, check=True)
-    finetune_cli = out.stdout.strip()
+    if subprocess.run([str(python), "-c", "import tensorboard"],
+                      capture_output=True).returncode == 0:
+        return
+    print("[launch] installing missing tensorboard into the model venv ...", flush=True)
+    uv = shutil.which("uv")
+    cmd = ([uv, "pip", "install", "--python", str(python), "tensorboard"] if uv
+           else [str(python), "-m", "pip", "install", "tensorboard"])
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"tensorboard install failed: {proc.stderr[-400:]}")
+
+
+def build_command(cfg: dict, python: Path) -> list[str]:
+    t = cfg["training"]
+    # Launch our shim, not finetune_cli directly: it caps the hardcoded
+    # 16-worker DataLoader that OOM-kills Colab VMs (see finetune_shim.py).
+    shim = Path(__file__).resolve().parent / "finetune_shim.py"
     cmd = [str(python), "-m", "accelerate.commands.launch",
-           "--mixed_precision", t["mixed_precision"], finetune_cli,
+           "--mixed_precision", t["mixed_precision"], str(shim),
            "--exp_name", cfg["exp_name"],
            "--dataset_name", cfg["dataset_name"],
            "--finetune",
@@ -96,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[launch] FAIL — prepared dataset missing ({data_dir}); run prepare first.")
         return 1
 
+    ensure_venv_deps(python)
     ckpt_dir = link_checkpoints(cfg, python)
     cmd = build_command(cfg, python)
     print("[launch] training command:\n  " + " ".join(cmd))
@@ -107,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
 
     log = workspace_dir(cfg) / "logs" / f"train_{time.strftime('%Y%m%d-%H%M%S')}.log"
     print(f"[launch] log: {log}", flush=True)
-    return run_streamed(cmd, log)
+    workers = str(cfg["training"].get("num_workers", 2))
+    return run_streamed(cmd, log, env_extra={"F5_NUM_WORKERS": workers})
 
 
 if __name__ == "__main__":
