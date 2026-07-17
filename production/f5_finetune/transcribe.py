@@ -20,6 +20,7 @@ import json
 import re
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -28,14 +29,32 @@ from production.f5_finetune.common import accepted_rows, load_config, workspace_
 
 _DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 
+#: Whisper likes curly punctuation and invisible marks; the pretrained vocab
+#: does not. Normalize BEFORE the charset check instead of failing on them.
+_CHAR_MAP = {"“": '"', "”": '"', "‘": "'", "’": "'",
+             "—": "-", "–": "-", "…": "...",
+             "​": "", "‌": "", "‍": "", "﻿": "", " ": " "}
+
+
+def normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text)
+    for src, dst in _CHAR_MAP.items():
+        text = text.replace(src, dst)
+    return " ".join(text.split())
+
 
 def romanize(text: str) -> str:
     """Devanagari -> lowercase Latin (ITRANS); Latin/digits/punct unchanged.
 
     Dandas are mapped to '.' FIRST — ITRANS would turn them into '|', which is
-    the metadata.csv field delimiter (found in the T3 sample run).
+    the metadata.csv field delimiter (found in the T3 sample run). Candra
+    vowels (ऑ/ॉ/ऍ/ॅ — English loanwords like "office" in Hindi script) are
+    folded to their plain forms first: ITRANS passes them through untouched,
+    which broke the T4 run (177/521 transcripts rejected by the vocab check).
     """
     text = text.replace("।", ". ").replace("॥", ". ")
+    text = (text.replace("ऑ", "ओ").replace("ॉ", "ो")
+                .replace("ऍ", "ए").replace("ॅ", "े"))
     if not _DEVANAGARI.search(text):
         return text
     from indic_transliteration import sanscript
@@ -44,13 +63,61 @@ def romanize(text: str) -> str:
     return latin.lower().replace("|", " ")
 
 
+def _write_outputs(out_dir: Path, records: list[dict], dropped: list[dict],
+                   report: dict) -> None:
+    with open(out_dir / "transcripts.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list((records + dropped)[0].keys()))
+        w.writeheader()
+        w.writerows(records + dropped)
+    # F5 manifest: pipe-delimited, header required, absolute audio paths.
+    with open(out_dir / "metadata.csv", "w", newline="", encoding="utf-8") as f:
+        f.write("audio_file|text\n")
+        for r in records:
+            f.write(f"{r['audio_file']}|{r['text'].replace('|', ' ')}\n")
+    (out_dir / "transcribe_report.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def re_romanize(cfg: dict) -> int:
+    """Re-render text from stored text_raw with the CURRENT romanization rules.
+
+    No Whisper involved — lets romanization fixes apply retroactively to an
+    existing (expensive) transcription run instead of redoing it.
+    """
+    tcfg = cfg["transcription"]
+    out_dir = workspace_dir(cfg) / "transcripts"
+    tr_csv = out_dir / "transcripts.csv"
+    with open(tr_csv, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    records, dropped = [], []
+    for r in rows:
+        r["text"] = normalize_text(romanize(r["text_raw"]) if tcfg["romanize"] else r["text_raw"])
+        bad = (len(r["text"]) < tcfg["min_chars"]
+               or float(r["no_speech_prob"]) > tcfg["max_no_speech_prob"])
+        (dropped if bad else records).append(r)
+    old_report = {}
+    rep_path = out_dir / "transcribe_report.json"
+    if rep_path.exists():
+        old_report = json.loads(rep_path.read_text(encoding="utf-8"))
+    report = {**old_report, "kept": len(records), "dropped": len(dropped),
+              "re_romanized": True}
+    _write_outputs(out_dir, records, dropped, report)
+    print(f"[transcribe] re-romanized {len(rows)} existing transcripts "
+          f"(kept {len(records)}) -> {out_dir / 'metadata.csv'}")
+    return 0 if records else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Transcribe accepted segments for F5 fine-tuning")
     parser.add_argument("--limit", type=int, default=0, help="Only N segments (0 = all)")
     parser.add_argument("--model", default=None, help="Override whisper model id")
+    parser.add_argument("--re-romanize", action="store_true",
+                        help="Recompute text from existing transcripts.csv (no Whisper)")
     args = parser.parse_args(argv)
 
     cfg = load_config()
+    if args.re_romanize:
+        return re_romanize(cfg)
     tcfg = cfg["transcription"]
     rows = accepted_rows(cfg)
     if args.limit:
@@ -87,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             parts.append(seg.text.strip())
             no_speech.append(seg.no_speech_prob)
         raw = " ".join(p for p in parts if p).strip()
-        text = romanize(raw) if tcfg["romanize"] else raw
+        text = normalize_text(romanize(raw) if tcfg["romanize"] else raw)
         worst_no_speech = max(no_speech) if no_speech else 1.0
         rec = {
             "segment_file": row["segment_file"],
@@ -107,16 +174,6 @@ def main(argv: list[str] | None = None) -> int:
         if i % 25 == 0 or i == len(rows):
             print(f"[transcribe] {i}/{len(rows)} ({time.time() - t0:.0f}s)", flush=True)
 
-    with open(out_dir / "transcripts.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(records[0].keys()))
-        w.writeheader()
-        w.writerows(records + dropped)
-    # F5 manifest: pipe-delimited, header required, absolute audio paths.
-    with open(out_dir / "metadata.csv", "w", newline="", encoding="utf-8") as f:
-        f.write("audio_file|text\n")
-        for r in records:
-            f.write(f"{r['audio_file']}|{r['text'].replace('|', ' ')}\n")
-
     langs: dict[str, int] = {}
     for r in records:
         langs[r["language"]] = langs.get(r["language"], 0) + 1
@@ -126,8 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         "languages": langs, "romanized": tcfg["romanize"],
         "elapsed_s": round(time.time() - t0, 1),
     }
-    (out_dir / "transcribe_report.json").write_text(
-        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    _write_outputs(out_dir, records, dropped, report)
     print(f"[transcribe] kept {len(records)}/{len(rows)} -> {out_dir / 'metadata.csv'}")
     return 0 if records else 1
 

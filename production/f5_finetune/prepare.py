@@ -45,24 +45,37 @@ def main() -> int:
 
     _, vocab = pretrained_vocab()
     bad: dict[str, list[str]] = {}
-    n_rows = 0
-    for line in meta_csv.read_text(encoding="utf-8").splitlines()[1:]:
+    covered_lines: list[str] = []
+    lines = meta_csv.read_text(encoding="utf-8").splitlines()
+    for line in lines[1:]:
         audio, _, text = line.partition("|")
-        n_rows += 1
         missing = sorted({ch for ch in text if ch not in vocab and ch != " "})
         if missing:
             bad[Path(audio).name] = missing
+        else:
+            covered_lines.append(line)
+    n_rows = len(lines) - 1
     charset_report = workspace_dir(cfg) / "transcripts" / "charset_report.json"
     charset_report.write_text(json.dumps(
         {"rows": n_rows, "rows_with_uncovered_chars": len(bad), "detail": bad},
         indent=2, ensure_ascii=False), encoding="utf-8")
     if bad:
         uncovered = sorted({c for chars in bad.values() for c in chars})
-        print(f"[prepare] FAIL — {len(bad)}/{n_rows} transcripts contain characters "
-              f"outside the pretrained vocab: {''.join(uncovered)!r}\n"
-              f"          see {charset_report}; fix romanization/normalization first.")
-        return 1
-    print(f"[prepare] charset OK — all {n_rows} transcripts covered by the pretrained vocab")
+        # A systematic romanization gap (like the candra-O incident: 177/521
+        # rows) must be fixed at the source; a handful of odd rows are dropped
+        # so one stray character cannot block training.
+        if len(bad) / max(n_rows, 1) > 0.10:
+            print(f"[prepare] FAIL — {len(bad)}/{n_rows} transcripts contain characters "
+                  f"outside the pretrained vocab: {''.join(uncovered)!r}\n"
+                  f"          see {charset_report}; fix romanization/normalization first.")
+            return 1
+        meta_csv = meta_csv.with_name("metadata_covered.csv")
+        meta_csv.write_text("\n".join([lines[0], *covered_lines]) + "\n", encoding="utf-8")
+        print(f"[prepare] charset: dropped {len(bad)}/{n_rows} rows with uncovered chars "
+              f"{''.join(uncovered)!r} (see {charset_report.name}); "
+              f"{len(covered_lines)} rows remain")
+    else:
+        print(f"[prepare] charset OK — all {n_rows} transcripts covered by the pretrained vocab")
 
     base = Path(str(files("f5_tts").joinpath("../.."))).resolve()
     out_dir = base / "data" / f"{cfg['dataset_name']}_{cfg['training']['tokenizer']}"

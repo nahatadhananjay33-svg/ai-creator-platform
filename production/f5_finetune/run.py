@@ -30,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start", action="store_true", help="Start training after prep")
     parser.add_argument("--skip-transcribe", action="store_true",
                         help="Reuse existing workspace transcripts")
+    parser.add_argument("--force-transcribe", action="store_true",
+                        help="Re-run Whisper even when reusable transcripts exist")
     parser.add_argument("--transcribe-limit", type=int, default=0,
                         help="Debug: only transcribe N segments")
     args = parser.parse_args(argv)
@@ -48,10 +50,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[run] FAIL — --skip-transcribe but {meta_csv} does not exist.")
         return 1
     if not args.skip_transcribe:
+        # Reuse an existing full transcription run (a large-v3 pass over the
+        # dataset costs ~35 min on a T4): when transcripts from the SAME
+        # whisper model exist, only re-render the romanization — that also
+        # applies romanization fixes retroactively without re-transcribing.
+        import json
+
+        tr_dir = workspace_dir(cfg) / "transcripts"
+        rep_path = tr_dir / "transcribe_report.json"
+        reusable = False
+        if not args.force_transcribe and rep_path.exists() and (tr_dir / "transcripts.csv").exists():
+            rep = json.loads(rep_path.read_text(encoding="utf-8"))
+            reusable = (rep.get("whisper_model") == cfg["transcription"]["whisper_model"]
+                        and rep.get("kept", 0) > 0 and not args.transcribe_limit)
         cmd = [str(python), "-m", "production.f5_finetune.transcribe"]
-        if args.transcribe_limit:
-            cmd += ["--limit", str(args.transcribe_limit)]
-        print("[run] stage 1/3 — transcribe", flush=True)
+        if reusable:
+            cmd += ["--re-romanize"]
+            print("[run] stage 1/3 — transcribe (reusing existing run, re-rendering text; "
+                  "--force-transcribe to redo)", flush=True)
+        else:
+            if args.transcribe_limit:
+                cmd += ["--limit", str(args.transcribe_limit)]
+            print("[run] stage 1/3 — transcribe", flush=True)
         if run_streamed(cmd, logs / f"transcribe_{ts}.log") != 0:
             return 1
 
