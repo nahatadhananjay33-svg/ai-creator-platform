@@ -1,10 +1,28 @@
 # AVATAR_DRIVE_UPLOAD — Production Avatar Dataset → Google Drive
 
-**Status: UPLOAD NOT PERFORMED — blocked on the destination.** The task says the
-Google Drive folder "will be provided"; no folder link has been supplied yet, and
-this machine has no bulk-upload path to Drive (no Drive for Desktop, no `rclone`,
-no authenticated Drive CLI; the available Drive connector cannot push 16.7 GB of
-binaries). Everything needed to upload and verify is prepared below.
+**Status: UPLOADED (2026-07-17) — full verification pending one notebook run.**
+
+The dataset was uploaded by the user to:
+
+- Path: `MyDrive/Ai_creator/Digital_Avatar_Tanshi/avatar_dataset`
+- Folder: <https://drive.google.com/drive/folders/1JGyi0atGEA79-2v2l3SMSFNHMuG8Fw7f>
+- Account: `nahatadhananjay33@gmail.com` (5 TB plan — no quota concern)
+
+Confirmed from this machine: the folder resolves via the Drive API (name,
+owner verified) and the tree visibly contains `accepted/`, `dataset.sqlite/csv/xlsx`
+plus the byproduct folders (`cropped_src/`, `_recovery/` — the full-archive
+upload, which is fine: manifest verification ignores extra files).
+
+**Why per-file verification hasn't run from this machine:** the available
+Drive connector is authorized on a different Google account
+(`pragyachopra22@gmail.com`) and cannot enumerate the 1133 children of a
+folder in another account's Drive. The per-file check (presence + size, or
+full sha256) is exactly what **cell 5 of
+`notebooks/tanshi_avatar_training.ipynb` runs automatically** when the
+notebook is opened under the owning account — the CONFIG cell already points
+`DATASET_PATH` at the uploaded folder. Run All → "Upload integrity: PASS"
+completes this objective (set `FULL_HASH_VERIFY = True` for the airtight
+16.7 GB re-hash).
 
 ## What to upload
 
