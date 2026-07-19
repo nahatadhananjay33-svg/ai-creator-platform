@@ -23,7 +23,9 @@ def _ffprobe_fps(path: Path) -> float:
          "stream=r_frame_rate", "-of", "csv=p=0", str(path)],
         capture_output=True, text=True)
     try:
-        num, den = out.stdout.strip().splitlines()[0].split("/")
+        # csv output for MOV files carries a trailing comma: "60/1,"
+        raw = out.stdout.strip().splitlines()[0].strip().rstrip(",")
+        num, den = raw.split("/")
         return float(num) / float(den)
     except Exception:
         return 30.0
@@ -73,32 +75,23 @@ def process_clip(src: Path) -> dict:
         ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
          "-f", "rawvideo", "-pix_fmt", "bgr24",
          "-s", f"{RENDER_RES}x{RENDER_RES}", "-r", f"{fps:.6f}", "-i", "-",
-         "-i", str(src), "-map", "0:v", "-map", "1:a?",
+         "-i", str(src), "-map", "0:v", "-map", "1:a:0?",
          "-c:v", "libx264", "-crf", str(RUN.crf), "-preset", RUN.preset,
+         # no -shortest: with a mis-declared fps it kills the mux mid-pipe;
+         # the video stream is exactly n frames long anyway
          "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", RUN.audio_bitrate,
-         "-shortest", str(tmp)],
+         str(tmp)],
         stdin=subprocess.PIPE)
     xs, ys, sides = crop["x"], crop["y"], crop["side"]
     i = 0
-    while True:
-        ok, frame = cap.read()
-        if not ok or i >= n:
-            break
-        s = int(round(sides[i]))
-        x = int(round(xs[i]))
-        y = int(round(ys[i]))
-        pad_l = max(0, -x)
-        pad_t = max(0, -y)
-        pad_r = max(0, x + s - W)
-        pad_b = max(0, y + s - H)
-        piece = frame[max(0, y):min(H, y + s), max(0, x):min(W, x + s)]
-        if pad_l or pad_t or pad_r or pad_b:
-            piece = cv2.copyMakeBorder(piece, pad_t, pad_b, pad_l, pad_r,
-                                       cv2.BORDER_CONSTANT, value=(0, 0, 0))
-        piece = cv2.resize(piece, (RENDER_RES, RENDER_RES),
-                           interpolation=cv2.INTER_AREA)
-        enc.stdin.write(piece.tobytes())
-        i += 1
+    try:
+        _stream_frames(cap, enc, xs, ys, sides, n, W, H)
+    except OSError:
+        cap.release()
+        enc.stdin.close()
+        enc.wait()
+        tmp.unlink(missing_ok=True)
+        return _fail(state_path, stem, src, "encode_pipe_broken")
     cap.release()
     enc.stdin.close()
     if enc.wait() != 0 or not tmp.exists() or tmp.stat().st_size == 0:
@@ -142,6 +135,30 @@ def process_clip(src: Path) -> dict:
     }
     state_path.write_text(json.dumps(state, indent=1), encoding="utf-8")
     return state
+
+
+def _stream_frames(cap, enc, xs, ys, sides, n, W, H):
+    import cv2
+    i = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or i >= n:
+            break
+        s = int(round(sides[i]))
+        x = int(round(xs[i]))
+        y = int(round(ys[i]))
+        pad_l = max(0, -x)
+        pad_t = max(0, -y)
+        pad_r = max(0, x + s - W)
+        pad_b = max(0, y + s - H)
+        piece = frame[max(0, y):min(H, y + s), max(0, x):min(W, x + s)]
+        if pad_l or pad_t or pad_r or pad_b:
+            piece = cv2.copyMakeBorder(piece, pad_t, pad_b, pad_l, pad_r,
+                                       cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        piece = cv2.resize(piece, (RENDER_RES, RENDER_RES),
+                           interpolation=cv2.INTER_AREA)
+        enc.stdin.write(piece.tobytes())
+        i += 1
 
 
 def _sample_output_quality(video: Path, k: int = 8):
