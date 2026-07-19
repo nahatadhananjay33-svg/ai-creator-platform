@@ -15,7 +15,8 @@ import os
 import shutil
 import subprocess
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import (ProcessPoolExecutor, ThreadPoolExecutor,
+                                as_completed)
 from pathlib import Path
 
 from .config import (DEFAULT_RES, OUT_ROOT, RENDER_DIR, RENDER_RES,
@@ -93,9 +94,18 @@ def stage2_variants(states) -> dict[int, list[dict]]:
             dest = VARIANT_ROOT[res] / sub / f"{st['stem']}.mp4"
             jobs.append((RENDER_DIR / f"{st['stem']}.mp4", dest, res))
     print(f"[stage2] encoding/placing {len(jobs)} variant files...")
-    with ProcessPoolExecutor(max_workers=RUN.workers) as pool:
+    # threads, not processes: the work is ffmpeg subprocesses, and Windows
+    # process pools proved fragile here (BrokenProcessPool mid-batch)
+    with ThreadPoolExecutor(max_workers=RUN.workers) as pool:
         futs = [pool.submit(_encode_variant, *j) for j in jobs]
-        done = sum(f.result() for f in as_completed(futs))
+        done = 0
+        for i, f in enumerate(as_completed(futs), 1):
+            try:
+                done += bool(f.result())
+            except Exception as e:
+                print(f"[stage2] ERROR: {e}", flush=True)
+            if i % 200 == 0:
+                print(f"[stage2] {i}/{len(jobs)}", flush=True)
     print(f"[stage2] {done}/{len(jobs)} variant files in place")
     return rows_by_res
 

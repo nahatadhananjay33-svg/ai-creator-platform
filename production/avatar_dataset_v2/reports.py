@@ -92,6 +92,9 @@ def write_upgrade_report(states: list[dict], scores: dict[int, dict],
                          winner: int, dest: Path) -> None:
     rendered = [s for s in states if s.get("status") == "rendered"]
     before = np.array([s["face_src_avg"] for s in rendered])
+    # what the previous (720p-downscale) training pipeline actually saw
+    before_720 = np.array([s["face_src_avg"] * 720 / max(s.get("src_h", 2160), 1)
+                           for s in rendered])
     wdf = pd.read_csv(VARIANT_ROOT[winner] / "dataset.csv")
     acc = wdf[wdf.accepted]
     after = acc.face_avg
@@ -123,13 +126,18 @@ def write_upgrade_report(states: list[dict], scores: dict[int, dict],
         f"- Average face size before (source frames): **{before.mean():.0f}px**",
         f"- Average face size after (winner accepted): **{after.mean():.0f}px**"
         if len(acc) else "- no accepted clips",
-        f"- Improvement: **{improvement:+.0f}%**",
+        f"- Improvement vs native source: **{improvement:+.0f}%** (faces keep "
+        f"their native pixels; the crop removes surroundings, not detail)",
+        f"- At the 720p resolution the previous training pipeline decoded, the "
+        f"same faces averaged **{before_720.mean():.0f}px** - against that "
+        f"baseline v2 is **{((after.mean() / max(before_720.mean(), 1)) - 1) * 100:+.0f}%**"
+        if len(acc) else "",
         f"- Largest improvement: {gains[0][1]} ({gains[0][0]:.1f}x)" if gains else "",
         "",
         "## Remaining weak clips (winner variant)",
     ]
     lines += [f"- {reason}: {count}" for reason, count in weak.items()] or ["- none"]
-    top = acc.sort_values("face_avg", ascending=False).clip[:20] \
+    top = acc.sort_values("face_avg", ascending=False)["clip"][:20] \
         if len(acc) else []
     lines += [
         "",
