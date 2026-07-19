@@ -128,4 +128,5 @@ def solve_crop(track, found: np.ndarray, frame_w: int, frame_h: int,
         "completeness": completeness,
         "hair_margin": hair_vis,
         "shoulder_margin": shoulder_vis,
+        "ok_frames": ok,          # per-frame coverage validity (for segmentation)
     }
