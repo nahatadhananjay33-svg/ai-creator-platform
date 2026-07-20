@@ -199,10 +199,12 @@ def _render_range(src: Path, dest: Path, crop, f0: int, f1: int, fps: float):
 
 
 def _measure(track, found, crop, f0, f1, fps, W, H, rendered: Path, stem, src_name):
-    sl = slice(f0, f1)
-    fh = track["h"][sl]
+    # track/found/crop arrive ALREADY aligned to [f0, f1) - never re-slice
+    # (the segmentation path passes pre-sliced arrays; f0/f1 are only the
+    # absolute source range for rendering/bookkeeping)
+    fh = track["h"]
     xs, ys, sides = crop["x"], crop["y"], crop["side"]
-    fnd = found[sl]
+    fnd = found
     scale_out = RENDER_RES / np.maximum(sides, 1.0)
     face_out = (fh * scale_out)[fnd]
     centers = np.stack([xs + sides / 2, ys + sides / 2], axis=1)
@@ -221,15 +223,15 @@ def _measure(track, found, crop, f0, f1, fps, W, H, rendered: Path, stem, src_na
         "completeness": float(ok[fnd].mean()) if fnd.any() else 0.0,
         "hair_margin": crop["hair_margin"], "shoulder_margin": crop["shoulder_margin"],
         "pad_frac": 0.0, "blur_var_1280": blur, "brightness": bright,
-        "yaw_abs_mean": float(np.abs(track["yaw"][sl][fnd]).mean()) if fnd.any() else 0.0,
-        "pitch_abs_mean": float(np.abs(track["pitch"][sl][fnd]).mean()) if fnd.any() else 0.0,
-        "roll_abs_mean": float(np.abs(track["roll"][sl][fnd]).mean()) if fnd.any() else 0.0,
+        "yaw_abs_mean": float(np.abs(track["yaw"][fnd]).mean()) if fnd.any() else 0.0,
+        "pitch_abs_mean": float(np.abs(track["pitch"][fnd]).mean()) if fnd.any() else 0.0,
+        "roll_abs_mean": float(np.abs(track["roll"][fnd]).mean()) if fnd.any() else 0.0,
         "face_src_avg": float(fh[fnd].mean()) if fnd.any() else 0.0,
         "crop_side_avg": float(sides.mean()),
         "mid_frame": int(n // 2),
         "mid_box": [float(xs[n // 2]), float(ys[n // 2]), float(sides[n // 2])],
-        "mid_face": [float(track["cx"][sl][n // 2]), float(track["cy"][sl][n // 2]),
-                     float(track["w"][sl][n // 2]), float(track["h"][sl][n // 2])],
+        "mid_face": [float(track["cx"][n // 2]), float(track["cy"][n // 2]),
+                     float(track["w"][n // 2]), float(track["h"][n // 2])],
     }
 
 
